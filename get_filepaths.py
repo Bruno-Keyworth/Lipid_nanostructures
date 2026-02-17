@@ -13,6 +13,7 @@ if socket.gethostname() == "Brunos-MacBook-Air-2.local":
     MASTER_FOLDER = Path('..')
     
 DATA_FOLDER = MASTER_FOLDER / 'Data'
+PLOTS_FOLDER = MASTER_FOLDER / 'Plots'
 
 def get_file(temperature, extrusions, concentration=0.2, lipid="POPC"):
     folder = DATA_FOLDER / lipid / (f'{concentration}_mg_ml') / (f'{extrusions}_extrusions')

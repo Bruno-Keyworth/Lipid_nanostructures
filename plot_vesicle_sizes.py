@@ -8,7 +8,7 @@ Created on Tue Feb 17 15:03:47 2026
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from get_filepaths import get_file
+from get_filepaths import get_file, PLOTS_FOLDER
 
 extrusions = [3, 5, 10, 15, 20, 31, 41]
 temperatures = [10, 20, 30, 40, 50, 60]
@@ -49,4 +49,5 @@ plt.xlabel("Temperature (°C)")
 plt.ylabel("Peak Diameter (nm)")
 plt.legend()
 plt.tight_layout()
+plt.savefig(PLOTS_FOLDER / 'Diameter_temperature_plot.png', dpi=300)
 plt.show()
