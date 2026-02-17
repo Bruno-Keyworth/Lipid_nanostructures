@@ -1,0 +1,15 @@
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Icon?
+.Spotlight-V100
+.Trashes
+*.pyc
+__pycache__/
+*.pyo
+*.swp
+*.swo
+*.tmp
+*.log
+*.bak
