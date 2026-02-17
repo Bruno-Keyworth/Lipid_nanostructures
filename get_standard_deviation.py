@@ -19,17 +19,21 @@ def red_chi(y_data, y_fit, errs):
     chi = np.sum(((y_fit-y_data)/errs)**2)
     return chi / len(y_data)
 
-def fit_gaussian(data):
+def fit_gaussian(data, PLOT = True):
     
+    # data folows gaussian better when plotted on a log scale. 
+    # fit is better when fitting to the log of x values
     x_data = np.log(data[:, 0])
     y_data = data[:, 1]
     errors = np.linspace(10,10,69)
     
+    # avoid zeros
     mask = y_data > 0
     y_data = y_data[mask]
     x_data = x_data[mask]
     errors = errors[mask]
     
+    # guesses 
     A0 = np.max(np.log(data[:, 1]))
     mu0 = np.mean(data)
     sigma0 = np.std(data, ddof=1)
@@ -48,23 +52,17 @@ def fit_gaussian(data):
     A_err, mu_err, sigma_err = np.sqrt(np.diag(pcov))
     params = [A, mu, sigma, A_err, mu_err, sigma_err]
     
-    plot_histogram(data, params)
+    if PLOT:
+        plot_gaussian(x_data, y_data, params)
     
     stan_dev = np.exp(params[1])* params[2]
     mean = np.exp(params[1])
     
     return stan_dev
 
-def plot_histogram(data, params):
+def plot_gaussian(x_data, y_data, params):
     
-    x_data = np.log((data[:, 0]))
-    y_data = data[:, 1]
     errors = np.linspace(0.5,0.5,69)
-    
-    mask = y_data > 0
-    y_data = y_data[mask]
-    x_data = x_data[mask]
-    errors = errors[mask]
     
     #x = np.linspace(np.min(data[:, 0]), np.max(data[:, 0]), 10000)
     x = np.linspace(0,6, 10000)
