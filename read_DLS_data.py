@@ -13,7 +13,7 @@ import os
 import json
 
 df = pd.read_csv(
-    "../Data/data.csv",
+    "../Data/data[1].csv",
     encoding="latin1",
     sep="\t",
     engine="python"
@@ -33,31 +33,33 @@ scalar_cols = [
 
 meta = df[scalar_cols].copy()
 
-sizes = df[size_cols].to_numpy()
-intensities = df[intensity_cols].to_numpy()
-volumes = df[volume_cols].to_numpy()
-correlations = df[corr_cols].to_numpy()
-delays = df[delay_cols].to_numpy()
 
 extrusions = [3, 5, 10, 15, 20, 31, 41]
 temperatures = [10, 20, 30, 40, 50, 60]
-
+df_valid = df[df["Sample Name"] != "Sample Name"]
+df_valid = df_valid.drop_duplicates(subset=["Sample Name", "Measurement Date and Time"])
 for e in extrusions:
     for t in temperatures:
+        mask = df_valid["Sample Name"].str.split().apply(
+            lambda s: s[0] == str(e) and s[5] == str(t)
+        )
+        subset = df_valid[mask]
         file = get_file(t, e)
+        print(t, e)
         data = []
-        for i, row in df.iterrows():
-            if row["Sample Name"] == "Sample Name":
-                continue
-            sample_name = row["Sample Name"].split(' ')
-            if not ((sample_name[0] == str(e)) and (sample_name[5] == str(t))):
-                continue
+        for i, row in subset.iterrows():
             meta_dict = meta.iloc[i].to_dict()
+            size_row = row[size_cols].to_numpy()
+            intensity_row = row[intensity_cols].to_numpy()
+            volume_row = row[volume_cols].to_numpy()
+            correlation_row = row[corr_cols].to_numpy()
+            delay_row = row[delay_cols].to_numpy()
+            
             data.append({
-                    'meta': meta_dict,
-                    'size': np.column_stack((sizes[i], intensities[i], volumes[i])).T.tolist(),
-                    'correlation': np.column_stack((correlations[i], delays[i])).T.tolist(),
-                    })
+                "meta": meta_dict,
+                "size": np.column_stack((size_row, intensity_row, volume_row)).T.tolist(),
+                "correlation": np.column_stack((correlation_row, delay_row)).T.tolist(),
+            })
         if data:  # only save if there is data
             os.makedirs(os.path.dirname(file), exist_ok=True)
             with open(file, "w", encoding="utf-8") as f:
