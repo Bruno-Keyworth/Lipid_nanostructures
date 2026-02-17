@@ -12,7 +12,7 @@ import socket
 if socket.gethostname() == "Brunos-MacBook-Air-2.local":
     MASTER_FOLDER = Path('..')
 else:
-    MASTER_FOLDER = Path('C:\\Users\\User\\OneDrive - The University of Manchester\\DM UNI\\YEAR 4\\MPHYS SEM 2\\code\\data_folder')
+    MASTER_FOLDER = Path('C:\\Users\\User\\OneDrive - The University of Manchester\\DM UNI\\YEAR 4\\MPHYS SEM 2\\code')
 
 DATA_FOLDER = MASTER_FOLDER / 'Data'
 PLOTS_FOLDER = MASTER_FOLDER / 'Plots'
