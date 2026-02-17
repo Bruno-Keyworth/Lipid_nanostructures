@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 from get_filepaths import get_file
 import os
-import pickle
+import json
 
 df = pd.read_csv(
     "../Data/data.csv",
@@ -53,13 +53,12 @@ for e in extrusions:
             if not ((sample_name[0] == str(e)) and (sample_name[5] == str(t))):
                 continue
             meta_dict = meta.iloc[i].to_dict()
-            data.append({'datetime': row["Measurement Date and Time"],
-                    'peak': [],
-                    'size': np.column_stack((sizes[i], intensities[i], volumes[i])),
-                    'correlation': np.column_stack((correlations[i], delays[i])),
+            data.append({
                     'meta': meta_dict,
+                    'size': np.column_stack((sizes[i], intensities[i], volumes[i])).T.tolist(),
+                    'correlation': np.column_stack((correlations[i], delays[i])).T.tolist(),
                     })
         if data:  # only save if there is data
             os.makedirs(os.path.dirname(file), exist_ok=True)
-            with open(file, 'wb') as f:
-                pickle.dump(data, f)
+            with open(file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
