@@ -19,50 +19,51 @@ def red_chi(y_data, y_fit, errs):
     chi = np.sum(((y_fit-y_data)/errs)**2)
     return chi / len(y_data)
 
-def fit_gaussian(data, PLOT = True):
-    
-    # data folows gaussian better when plotted on a log scale. 
-    # fit is better when fitting to the log of x values
-    x_data = np.log(data[:, 0])
-    y_data = data[:, 1]
-    errors = np.linspace(10,10,69)
-    
-    # avoid zeros
-    mask = y_data > 0
-    y_data = y_data[mask]
-    x_data = x_data[mask]
-    errors = errors[mask]
-    
-    # guesses 
-    A0 = np.max(np.log(data[:, 1]))
-    mu0 = np.mean(data)
-    sigma0 = np.std(data, ddof=1)
-    p0 = [A0, mu0, sigma0]
-    
-    #fitting procedure for a gaussian
-    popt, pcov = curve_fit(
-    gaussian,
-    x_data,
-    y_data,
-    p0=p0,
-    sigma=errors,
-    absolute_sigma=True)
-    
-    A, mu, sigma = popt
-    A_err, mu_err, sigma_err = np.sqrt(np.diag(pcov))
-    params = [A, mu, sigma, A_err, mu_err, sigma_err]
-    
-    if PLOT:
-        plot_gaussian(x_data, y_data, params)
-    
-    stan_dev = np.exp(params[1])* params[2]
-    mean = np.exp(params[1])
-    
-    return stan_dev
+def fit_gaussian(data, PLOT = False):
 
-def plot_gaussian(x_data, y_data, params):
-    
-    errors = np.linspace(0.5,0.5,69)
+    sizes = data[:, 0]
+    intensities = data[:, 1]
+
+    # Remove zeros
+    mask = intensities > 0
+    sizes = sizes[mask]
+    intensities = intensities[mask]
+
+    if len(sizes) < 3:
+        return np.nan
+
+    x_data = np.log(sizes)
+    y_data = intensities
+
+    # Constant errors
+    errors = np.full(len(y_data), 1.0)
+
+    # Stronger initial guesses
+    A0 = np.max(y_data)
+    mu0 = np.average(x_data, weights=y_data)
+    sigma0 = np.sqrt(np.average((x_data - mu0)**2, weights=y_data))
+
+    p0 = [A0, mu0, sigma0]
+
+    popt, pcov = curve_fit(
+        gaussian,
+        x_data,
+        y_data,
+        p0=p0,
+        sigma=errors,
+        absolute_sigma=True,
+        maxfev=10000
+    )
+
+    A, mu, sigma = popt
+
+    if PLOT:
+        plot_gaussian(x_data, y_data,errors, popt)
+
+    return np.exp(mu) * sigma
+
+def plot_gaussian(x_data, y_data, errors, params):
+
     
     #x = np.linspace(np.min(data[:, 0]), np.max(data[:, 0]), 10000)
     x = np.linspace(0,6, 10000)
