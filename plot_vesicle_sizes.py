@@ -183,15 +183,15 @@ def plot_sizes(control, independent, control_label, xlabel):
                         encoding="utf-8"
                     )
     
-                    if xlabel == "Number of Extrusions":
+                    if xlabel == "Temp, [°C]":
                         mask = (
-                            (fallback["Extrusion"] == i) &
-                            (fallback["Temp"] == c)
+                            (fallback["Extrusion"] == c) &
+                            (fallback["Temp"] == i)
                         )
                     else:
                         mask = (
-                            (fallback["Extrusion"] == c) &
-                            (fallback["Temp"] == i))
+                            (fallback["Extrusion"] == i) &
+                            (fallback["Temp"] == c))
     
                     selected = fallback[mask]
     
