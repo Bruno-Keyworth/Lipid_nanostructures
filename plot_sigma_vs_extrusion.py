@@ -18,6 +18,7 @@ from get_standard_deviation import fit_gaussian
 extrusions = [3, 5, 10, 15, 20, 31, 41]
 temperatures = [10, 20, 30, 40, 50, 60]
 #temperatures = [10, 30, 60]
+#temperatures = [20, 40, 50]
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -102,7 +103,7 @@ for t in temperatures:
 
 ax.set_xlabel("Number of Extrusions")
 ax.set_ylabel("Mean Standard Deviation")
-ax.grid(alpha=0.3)
+ax.grid(linestyle="--", alpha=0.3)
 ax.legend(loc="best")
 plt.savefig(PLOTS_FOLDER / 'POPC_sigma_vs_extrusions_plot.png', dpi=300)
 plt.show()
