@@ -16,18 +16,20 @@ temperatures = [10, 20, 30, 40, 50, 60]
 def plot_sizes(control, independent, control_label, xlabel):
     
     fig, ax = plt.subplots(figsize=(10, 6))
-    
-    for c in control:
-        ind= []
+
+    x = np.arange(len(independent))              # group positions
+    bar_width = 0.8 / len(control)               # total width ≈ 0.8
+
+    for idx, c in enumerate(control):
         peaks = []
         errors = []
-    
+
         for i in independent:
             if xlabel == "Temp, [°C]":
                 file = get_file(i, c)
             else:
-                file = get_file(c, i)  
-                
+                file = get_file(c, i)
+
             try:
                 with open(file, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -41,7 +43,7 @@ def plot_sizes(control, independent, control_label, xlabel):
                         dtype=None,
                         encoding="utf-8"
                     )
-    
+
                     if xlabel == "Temp, [°C]":
                         mask = (
                             (fallback["Extrusion"] == c) &
@@ -50,11 +52,11 @@ def plot_sizes(control, independent, control_label, xlabel):
                     else:
                         mask = (
                             (fallback["Extrusion"] == i) &
-                            (fallback["Temp"] == c))
-    
+                            (fallback["Temp"] == c)
+                        )
+
                     selected = fallback[mask]
-    
-                    # Build synthetic data structure matching expected JSON format
+
                     data = []
                     for row in selected:
                         if not np.isnan(row["Mean_nm"]):
@@ -63,33 +65,44 @@ def plot_sizes(control, independent, control_label, xlabel):
                                     "CONTIN Peaks[1]": row["Mean_nm"]
                                 }
                             })
-    
                 except Exception:
+                    peaks.append(np.nan)
+                    errors.append(np.nan)
                     continue
-            except FileNotFoundError:
-                continue
-    
-            # Multiple measurements per file → average them
+
             values = [
                 float(d["meta"]["CONTIN Peaks[1]"])
                 for d in data
                 if "CONTIN Peaks[1]" in d["meta"]
                    and d["meta"]["CONTIN Peaks[1]"] not in ("", None)
             ]
-    
-            if values:               
-                ind.append(i)
+
+            if values:
                 peaks.append(np.mean(values))
                 errors.append(np.std(values))
-    
-        if ind:
-            ax.errorbar(ind, peaks, yerr=errors, marker="o", label = f"{c}{control_label}", 
-                        linestyle='', markeredgecolor='black', capsize = 4,
-                        markersize=6, elinewidth=1.2, markeredgewidth=0.5)
-    
+            else:
+                peaks.append(np.nan)
+                errors.append(np.nan)
+
+        offset = (idx - (len(control) - 1) / 2) * bar_width
+
+        ax.bar(
+            x + offset,
+            peaks,
+            bar_width,
+            yerr=errors,
+            capsize=4,
+            edgecolor="black",
+            linewidth=0.6,
+            label=f"{c}{control_label}"
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(independent)
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Peak Diameter (nm)")
     ax.legend()
+
     plt.tight_layout()
     filename = f"Diameter_{xlabel}_plot.png"
     plt.savefig(PLOTS_FOLDER / filename, dpi=300)
@@ -98,4 +111,3 @@ def plot_sizes(control, independent, control_label, xlabel):
 plot_sizes(temperatures, extrusions, "°C", "Number of Extrusions")
 
 plot_sizes(extrusions, temperatures, " Extrusions", "Temp, [°C]")
-
