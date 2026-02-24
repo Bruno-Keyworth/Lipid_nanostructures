@@ -6,7 +6,6 @@ Created on Tue Feb 17 15:03:47 2026
 @author: brunokeyworth
 """
 import json
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 from get_filepaths import get_file, PLOTS_FOLDER, DATA_FOLDER

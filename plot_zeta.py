@@ -14,7 +14,6 @@ from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 # ----------------------------
 # Read the data file
 # ----------------------------
-
 df = pd.read_csv(
     DATA_FOLDER / 'POPC-POPG' / "zeta.txt",
     sep="\t",
@@ -26,9 +25,6 @@ df.columns = df.columns.str.strip()
 # Keep only required columns
 df = df[["Sample Name", "ZP"]].dropna()
 df["ZP"] = df["ZP"].astype(float)
-
-
-# ----------------------------
 
 # ----------------------------
 # Extract POPG fraction
@@ -43,33 +39,50 @@ def extract_popg_fraction(name):
 
 df["POPG_fraction"] = df["Sample Name"].apply(extract_popg_fraction)
 
-# Drop rows where parsing failed
-df = df.dropna(subset=["POPG_fraction"])
+# ----------------------------
+# Extract concentration (mg/ml)
+# ----------------------------
+def extract_concentration(name):
+    m = re.search(r"([\d.]+)\s*mg_ml", name)
+    return float(m.group(1)) if m else np.nan
+
+df["conc_mg_ml"] = df["Sample Name"].apply(extract_concentration)
+df["conc_label"] = df["conc_mg_ml"].fillna("unspecified")
 
 # ----------------------------
-# Group repeats: mean & std
+# Drop failed rows
+# ----------------------------
+df = df.dropna(subset=["POPG_fraction", "ZP"])
+
+# ----------------------------
+# Group repeats: mean & std per (fraction, concentration)
 # ----------------------------
 stats = (
-    df.groupby("POPG_fraction")["ZP"]
+    df.groupby(["POPG_fraction", "conc_label"])["ZP"]
       .agg(["mean", "std"])
       .reset_index()
       .sort_values("POPG_fraction")
 )
 
 # ----------------------------
-# Plot
+# Plot: colour = concentration
 # ----------------------------
 plt.figure(figsize=(6, 4))
-plt.errorbar(
-    stats["POPG_fraction"],
-    stats["mean"],
-    yerr=stats["std"],
-    fmt="o",
-    capsize=4
-)
+
+for conc, sub in stats.groupby("conc_label"):
+    plt.errorbar(
+        sub["POPG_fraction"],
+        sub["mean"],
+        yerr=sub["std"],
+        fmt="o",
+        capsize=4,
+        label=str(conc)
+    )
+
 plt.xlabel("POPG fraction")
 plt.ylabel("Zeta potential (mV)")
+plt.legend(title="Concentration (mg/ml)")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(PLOTS_FOLDER / 'zeta.png', dpi=300)
+plt.savefig(PLOTS_FOLDER / "zeta.png", dpi=300)
 plt.show()
