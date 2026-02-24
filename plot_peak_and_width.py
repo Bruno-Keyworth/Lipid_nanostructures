@@ -129,6 +129,7 @@ def grouped_bar_plot(
     ax.set_xticklabels(independent)
     ax.set_xlabel("Temp, [°C]")
     ax.set_ylabel(ylabel)
+    ax.set_ylim(min(means)-20)
     ax.legend()
     ax.grid(linestyle="--", alpha=0.3)
 

@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import pandas as pd
+from get_filepaths import get_file, PLOTS_FOLDER, DATA_FOLDER
 
 #==============================================================================
 def gaussian(x, A, mu, sigma):
@@ -36,7 +37,7 @@ def fit_gaussian(data, PLOT = False):
     y_data = intensities
 
     # Constant errors
-    errors = np.full(len(y_data), 1.0)
+    errors = np.full(len(y_data), 0.5)
 
     # Stronger initial guesses
     A0 = np.max(y_data)
@@ -79,7 +80,9 @@ def plot_gaussian(x_data, y_data, errors, params):
     ax.axvline(np.exp(params[1]), color="blue", linestyle = "--", 
                label=r"$\mu$")
     
-    ax.errorbar(np.exp(x_data), y_data, errors, fmt="rx")
+    ax.errorbar(np.exp(x_data), y_data, errors, marker = "o", ls="",capsize=4,
+    markeredgecolor="black",
+    linewidth=0.6,)
     
 
     ax.plot(np.exp(x), y_gauss, color="black", linestyle = "--",
@@ -102,24 +105,24 @@ def plot_gaussian(x_data, y_data, errors, params):
 #==============================================================================
 
 
-'''
-df = pd.read_csv("data_test.csv", sep="\t", encoding="latin1")
+# filepath= DATA_FOLDER / "data[1].csv"
+# df = pd.read_csv(filepath, sep="\t", encoding="latin1")
 
 
-intens = df.iloc[36, 74:143]
-intens2 = df.iloc[62, 74:143]
-size = df.iloc[1, 3:72]
+# intens = df.iloc[36, 74:143]
+# intens2 = df.iloc[62, 74:143]
+# size = df.iloc[1, 3:72]
 
-intens = intens.astype(float)
-intens2 = intens2.astype(float)
-size = size.astype(float)
+# intens = intens.astype(float)
+# intens2 = intens2.astype(float)
+# size = size.astype(float)
 
 
-data = np.column_stack((size.values, intens.values))
-data2 = np.column_stack((size.values, intens2.values))
-stand_dev = fit_gaussian(data)
-stand_dev1 = fit_gaussian(data2)
-'''
+# data = np.column_stack((size.values, intens.values))
+# data2 = np.column_stack((size.values, intens2.values))
+# stand_dev = fit_gaussian(data)
+# stand_dev1 = fit_gaussian(data2)
+
 
 
 
