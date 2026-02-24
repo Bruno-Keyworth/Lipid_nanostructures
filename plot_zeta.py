@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import re
-from get_filepaths import DATA_FOLDER
+from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
 # ----------------------------
 # Read the data file
@@ -20,7 +20,6 @@ df = pd.read_csv(
     sep="\t",
     skiprows=[1]  # skip units row
 )
-print(df.columns.tolist())
 # Clean column names
 df.columns = df.columns.str.strip()
 
@@ -72,4 +71,5 @@ plt.xlabel("POPG fraction")
 plt.ylabel("Zeta potential (mV)")
 plt.grid(True)
 plt.tight_layout()
+plt.savefig(PLOTS_FOLDER / 'zeta.png', dpi=300)
 plt.show()
