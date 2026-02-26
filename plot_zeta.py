@@ -15,17 +15,12 @@ from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 # Read the data file
 # ----------------------------
 
-# df = pd.read_csv(
-#     DATA_FOLDER / 'POPC-POPG' / "zeta.txt",
-#     sep="\t",
-#     skiprows=[1]  # skip units row
-# )
-
 df = pd.read_csv(
-    DATA_FOLDER / 'surfactant' / "surfactant_zeta.txt",
+    DATA_FOLDER / 'POPC-POPG' / "zeta.txt",
     sep="\t",
     skiprows=[1]  # skip units row
 )
+
 
 # Clean column names
 df.columns = df.columns.str.strip()

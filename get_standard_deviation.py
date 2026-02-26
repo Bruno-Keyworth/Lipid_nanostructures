@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import pandas as pd
-from get_filepaths import get_file, PLOTS_FOLDER, DATA_FOLDER
+from get_filepaths import PLOTS_FOLDER, DATA_FOLDER
 
 #==============================================================================
 def gaussian(x, A, mu, sigma):

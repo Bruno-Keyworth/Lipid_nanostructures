@@ -11,7 +11,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from get_filepaths import get_file, PLOTS_FOLDER, DATA_FOLDER
+from get_filepaths import _get_file, PLOTS_FOLDER, DATA_FOLDER
 from get_standard_deviation import fit_gaussian
 
 extrusions = [3, 5, 10, 15, 20, 31, 41]
@@ -36,7 +36,7 @@ except Exception:
 def load_measurements(temp, extrusion):
     """Load JSON measurements or return None."""
     try:
-        with open(get_file(temp, extrusion), "r", encoding="utf-8") as f:
+        with open(_get_file(temp, extrusion), "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return None
