@@ -26,6 +26,17 @@ df = pd.read_csv(
 
 df.columns = df.columns.str.strip()
 
+df["Measurement Date and Time"] = pd.to_datetime(
+    df["Measurement Date and Time"],
+    dayfirst=True,
+    errors="coerce"
+)
+
+df = (
+    df.sort_values("Measurement Date and Time")
+      .drop_duplicates(subset="Sample Name", keep="last")
+)
+
 # Keep required columns
 df = df[["Sample Name", "ZP"]].dropna()
 df["ZP"] = df["ZP"].astype(float)
