@@ -10,7 +10,7 @@ import os
 import json
 import pandas as pd
 import numpy as np
-from get_filepaths import _get_file
+from get_filepaths import _get_file, DATA_FOLDER
 
 def process_dls_csv(
     csv_path,
@@ -44,7 +44,7 @@ def process_dls_csv(
     # Read CSV
     # ----------------------------
     df = pd.read_csv(
-        csv_path,
+        DATA_FOLDER / csv_path,
         encoding=encoding,
         sep=sep,
         engine="python"
@@ -116,4 +116,4 @@ def process_dls_csv(
                     
                     
                     
-process_dls_csv("../Data/data[95].csv")
+process_dls_csv("data[95].csv")
