@@ -2,7 +2,9 @@
 """
 Created on Wed Feb 25 22:39:39 2026
 
-@author: David
+@author: David Mawson
+
+modified code written by Bruno Keyworth in plot_zeta.py
 """
 
 # -*- coding: utf-8 -*-
@@ -77,8 +79,8 @@ for surf, sub in stats.groupby("surfactant"):
         label=surf
     )
 
-plt.xlabel("C12E6 concentration (µM)")
-plt.ylabel("Zeta potential (mV)")
+plt.xlabel("Surfactant concentration [µM]")
+plt.ylabel("Zeta potential [mV]")
 plt.legend(title="Surfactant")
 plt.grid(True)
 plt.tight_layout()
