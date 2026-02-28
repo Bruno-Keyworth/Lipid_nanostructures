@@ -21,7 +21,6 @@ df = pd.read_csv(
     skiprows=[1]  # skip units row
 )
 
-
 # Clean column names
 df.columns = df.columns.str.strip()
 
@@ -77,7 +76,7 @@ for conc, sub in stats.groupby("conc_label"):
         sub["POPG_fraction"],
         sub["mean"],
         yerr=sub["std"],
-        fmt="o",
+        fmt="o", ls="-",
         capsize=4,
         label=str(conc)
     )
@@ -87,5 +86,5 @@ plt.ylabel("Zeta potential (mV)")
 plt.legend(title="Concentration (mg/ml)")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(PLOTS_FOLDER / "zeta.png", dpi=300)
+plt.savefig(PLOTS_FOLDER / "ZETA_vs_charged_lipid_fraction.png", dpi=300)
 plt.show()

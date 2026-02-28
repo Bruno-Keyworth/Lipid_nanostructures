@@ -47,7 +47,8 @@ def process_dls_csv(
         DATA_FOLDER / csv_path,
         encoding=encoding,
         sep=sep,
-        engine="python"
+        engine="python",
+        on_bad_lines="warn"
     )
 
     # ----------------------------
@@ -116,4 +117,4 @@ def process_dls_csv(
                     
                     
                     
-process_dls_csv("data[95].csv")
+process_dls_csv("data[1].csv")
