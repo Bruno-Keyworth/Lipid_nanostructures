@@ -19,7 +19,7 @@ def process_dls_csv(
     temperatures=(10, 20, 30, 40, 50, 60),
     encoding="latin1",
     sep="\t"
-):
+    ):
     """
     Read a DLS CSV file, group data by extrusion and temperature,
     and write processed JSON files using get_file(t, e).

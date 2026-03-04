@@ -14,9 +14,29 @@ import matplotlib.pyplot as plt
 import re
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
+
+import matplotlib.colors as mcolors
+from itertools import cycle
+import cmcrameri.cm as cmc
 # ----------------------------
 # Read the data file
 # ----------------------------
+#==============================================================================
+# pick a colormap
+cmap = cmc.hawaii.resampled(10)
+
+
+# generate reversed list of colours from the colormap
+colors = [mcolors.to_hex(cmap(i)) for i in range(cmap.N)][::-1]
+
+# set as the default color cycle
+plt.rcParams['axes.prop_cycle'] = plt.cycler(color=colors)
+
+# Define linestyles and markers
+linestyles = cycle(['-', '--', '-.', ':'])
+markers = cycle(['o', 's', 'v', 'D', '^', '*', 'x', 'P'])
+
+#==============================================================================
 
 df = pd.read_csv(
     DATA_FOLDER / 'surfactant' / "surfactant_zeta.txt",
@@ -62,6 +82,23 @@ def extract_microM(name):
     m = re.search(r"(\d+)\s*microM", name)
     return float(m.group(1)) if m else np.nan
 
+
+def extract_lipid_ratio(name):
+    m = re.search(r"(\d+)\s+([A-Z]+)\s*:\s*(\d+)\s+([A-Z]+)", name)
+    if m:
+        return {
+            "lipid1_n": int(m.group(1)),
+            "lipid1": m.group(2),
+            "lipid2_n": int(m.group(3)),
+            "lipid2": m.group(4),
+        }
+    return None
+
+def extract_lipid_conc(name):
+    m = re.search(r"([\d\.]+)\s*mg_ml", name)
+    return float(m.group(1)) if m else np.nan
+
+
 df["conc_microM"] = df["Sample Name"].apply(extract_microM)
 
 # Drop failed rows
@@ -82,9 +119,13 @@ stats = (
 # Lines = surfactant type and lipid structure
 # ----------------------------
 
-plt.figure(figsize=(8, 5))
+plt.figure(figsize=(11, 5))
 
 for (surf, ratio), sub in stats.groupby(["surfactant", "ratio"]):
+    
+    ls = next(linestyles)
+    mk = next(markers)
+    
     sub = sub.sort_values("conc_microM")
     label = f"{surf} | {ratio}"
     
@@ -92,15 +133,20 @@ for (surf, ratio), sub in stats.groupby(["surfactant", "ratio"]):
         sub["conc_microM"],
         sub["mean"],
         yerr=sub["std"],
-        fmt="o-",
-        capsize=4,
+        marker=mk, linestyle = ls, markeredgecolor="black", 
+        markeredgewidth = 0.5, capsize=4,
         label=label
     )
 
 plt.xlabel("Surfactant concentration [µM]")
 plt.ylabel("Zeta potential [mV]")
-plt.legend(title = "Surfactant | uncharged : charged lipid",fontsize=10)
+plt.legend(title = "Surfactant | uncharged : charged lipid",fontsize=10, 
+           bbox_to_anchor = (1.22,0.5), loc="center")
 plt.grid(True, alpha=0.5)
 plt.tight_layout()
 plt.savefig(PLOTS_FOLDER / "ZETA_vs_surfactant_conc.png", dpi=300)
 plt.show()
+
+
+#==============================================================================
+
