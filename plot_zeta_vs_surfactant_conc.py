@@ -18,9 +18,7 @@ from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import matplotlib.colors as mcolors
 from itertools import cycle
 import cmcrameri.cm as cmc
-# ----------------------------
-# Read the data file
-# ----------------------------
+
 #==============================================================================
 # pick a colormap
 cmap = cmc.hawaii.resampled(10)

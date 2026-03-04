@@ -11,10 +11,24 @@ import re
 from pathlib import Path
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
+import matplotlib.colors as mcolors
+from itertools import cycle
+import cmcrameri.cm as cmc
 
+def colours_style(length):
+    cmap = cmc.hawaii.resampled(len(unique_combos))
 
-# ==========================================================
-# LOAD FILE 
+    # generate reversed list of colours from the colormap
+    colors = [mcolors.to_hex(cmap(i)) for i in range(cmap.N)][::-1]
+
+    # set as the default color cycle
+    plt.rcParams['axes.prop_cycle'] = plt.cycler(color=colors)
+
+    # Define linestyles and markers
+    linestyles = cycle(['-', '--', '-.', ':'])
+    markers = cycle(['o', 's', 'v', 'D', '^', '*', 'x', 'P', 'h', '+', '.', '>'])
+    
+    return markers, linestyles
 
 
 filepath = DATA_FOLDER / 'surfactant' / "surfactant_zeta.txt"
@@ -24,6 +38,7 @@ with open(filepath, "r") as f:
 
 # Remove header + units row
 data_lines = lines[2:]
+
 
 # Containers
 zeta = []
@@ -101,10 +116,10 @@ ratio_label = ratio_label[mask]
 # GROUP BY (surfactant, ratio)
 
 
-unique_combos = np.unique(
-    np.stack((surfactant, ratio_label), axis=1),
-    axis=0
-)
+unique_combos = np.unique(np.stack((surfactant, ratio_label), axis=1),axis=0)
+
+markers, linestyles = colours_style(len(unique_combos))
+
 
 plt.figure(figsize=(11,6))
 
@@ -130,13 +145,16 @@ for surf, ratio in unique_combos:
     stds = np.array(stds)
 
     order = np.argsort(unique_conc)
-
+    
+    ls = next(linestyles)
+    mk = next(markers)
+    
     plt.errorbar(
         unique_conc[order],
         means[order],
         yerr=stds[order],
-        marker="o",
-        capsize=4,
+        marker=mk, linestyle = ls, markeredgecolor="black", 
+        markeredgewidth = 0.5, capsize=4,
         label=f"{surf} | {ratio}"
     )
 
@@ -150,6 +168,7 @@ plt.title("Zeta potential vs surfactant concentration")
 plt.legend(bbox_to_anchor=(1.22, 0.5), loc="center")
 plt.grid(alpha=0.4)
 plt.tight_layout()
+plt.savefig(PLOTS_FOLDER / "surfactant_ZETA_vs_lipid_fraction.png", dpi=300)
 plt.show()
 
 
@@ -168,6 +187,9 @@ surfactant = surfactant[mask_conc]
 charged_fraction = charged_fraction[mask_conc]
 
 unique_surf = np.unique(surfactant)
+
+markers, linestyles = colours_style(len(unique_surf))
+
 
 plt.figure(figsize=(8,5))
 
@@ -195,12 +217,15 @@ for surf in unique_surf:
     # Sort by fraction
     order = np.argsort(unique_frac)
 
+    ls = next(linestyles)
+    mk = next(markers)
+    
     plt.errorbar(
         unique_frac[order],
         means[order],
         yerr=stds[order],
-        marker="o",
-        capsize=4,
+        marker=mk, linestyle = ls, markeredgecolor="black", 
+        markeredgewidth = 0.5, capsize=4,
         label=surf
     )
 
@@ -213,4 +238,5 @@ plt.title(f"Zeta vs charged fraction ({fixed_conc} µM)")
 plt.legend(title="Surfactant")
 plt.grid(alpha=0.4)
 plt.tight_layout()
+plt.savefig(PLOTS_FOLDER / "ZETA_vs_surfactant_conc.png", dpi=300)
 plt.show()
