@@ -5,20 +5,29 @@ Created on Tue Feb 24 13:52:29 2026
 
 @author: brunokeyworth
 """
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 import json
-import os
+import sys
+from pathlib import Path
+from datetime import datetime
+from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 
-from get_filepaths import _get_file, PLOTS_FOLDER, DATA_FOLDER
-from get_standard_deviation import fit_gaussian
+# --- fix imports ---
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
 
-extrusions = [3, 5, 10, 15, 20, 31, 41]
+from get_filepaths import _get_file, DATA_FOLDER
+
+extrusion = 31
 temperatures = [10, 20, 30, 40, 50, 60]
+time_format = "%d %B %Y %H:%M:%S"
 
 # -------------------------------------------------
-# Load fallback data once
+# Load fallback data
 # -------------------------------------------------
 fallback_path = DATA_FOLDER / "unrecorded_data.txt"
 try:
@@ -33,15 +42,6 @@ except Exception:
     fallback_data = None
 
 
-def load_measurements(temp, extrusion):
-    """Load JSON measurements or return None."""
-    try:
-        with open(_get_file(temp, extrusion), "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
 def fallback_select(temp, extrusion):
     if fallback_data is None:
         return None
@@ -50,107 +50,124 @@ def fallback_select(temp, extrusion):
         (fallback_data["Temp"] == temp) &
         (fallback_data["Extrusion"] == extrusion)
     )
+
     selected = fallback_data[mask]
     return selected if len(selected) > 0 else None
 
-def extract_peak_diameters(data):
-    values = [
-        float(d["meta"]["CONTIN Peaks[1]"])
-        for d in data
-        if "CONTIN Peaks[1]" in d["meta"]
-           and d["meta"]["CONTIN Peaks[1]"] not in ("", None)
+
+# -------------------------------------------------
+# First pass: find global earliest measurement date
+# -------------------------------------------------
+all_dates = []
+
+for t in temperatures:
+    try:
+        with open(_get_file(t, extrusion), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = None
+
+    if data is not None:
+        for d in data:
+            meta = d["meta"]
+            if "Measurement Date and Time" in meta:
+                try:
+                    dt = datetime.strptime(
+                        meta["Measurement Date and Time"],
+                        time_format
+                    )
+                    all_dates.append(dt.date())
+                except (ValueError, TypeError):
+                    pass
+
+    else:
+        fb = fallback_select(t, extrusion)
+        if fb is not None and "Date" in fb.dtype.names:
+            for d in fb["Date"]:
+                try:
+                    dt = datetime.strptime(d, "%Y-%m-%d").date()
+                    all_dates.append(dt)
+                except Exception:
+                    pass
+
+if not all_dates:
+    raise RuntimeError("No valid measurement dates found.")
+
+global_date0 = min(all_dates)
+
+# -------------------------------------------------
+# Second pass: plotting
+# -------------------------------------------------
+plt.figure()
+
+for t in temperatures:
+
+    try:
+        with open(_get_file(t, extrusion), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = None
+
+    day_values = defaultdict(list)
+
+    if data is not None:
+
+        for d in data:
+            meta = d["meta"]
+
+            if (
+                "CONTIN Peaks[1]" not in meta or
+                "Measurement Date and Time" not in meta
+            ):
+                continue
+
+            try:
+                peak = float(meta["CONTIN Peaks[1]"])
+                dt = datetime.strptime(
+                    meta["Measurement Date and Time"],
+                    time_format
+                ).date()
+            except (ValueError, TypeError):
+                continue
+
+            day_values[dt].append(peak)
+
+    # ---------------- fallback ----------------
+    if not day_values:
+        fb = fallback_select(t, extrusion)
+
+        if fb is not None and "Date" in fb.dtype.names:
+            for d, peak in zip(fb["Date"], fb["Mean_nm"]):
+                try:
+                    dt = datetime.strptime(d, "%Y-%m-%d").date()
+                    day_values[dt].append(float(peak))
+                except Exception:
+                    continue
+
+    if not day_values:
+        continue
+
+    days_sorted = sorted(day_values.keys())
+
+    elapsed_days = [
+        (day - global_date0).days
+        for day in days_sorted
     ]
-    return values
 
+    peaks_avg = [
+        np.mean(day_values[day])
+        for day in days_sorted
+    ]
 
-def extract_sigmas(data):
-    sigmas = []
-    for m in data:
-        sizes = np.asarray(m["size"][0], float)
-        intensities = np.asarray(m["size"][1], float)
-        stacked = np.column_stack((sizes, intensities))
-        sigma = fit_gaussian(stacked, PLOT=False)
-        if not np.isnan(sigma):
-            sigmas.append(sigma)
-    return sigmas
+    plt.plot(
+        elapsed_days,
+        peaks_avg,
+        marker="o",
+        label=f"{t} °C"
+    )
 
-def grouped_bar_plot(
-    control,
-    independent,
-    extractor,
-    fallback_column,
-    ylabel,
-    filename,
-):
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    x = np.arange(len(independent))
-    bar_width = 0.8 / len(control)
-
-    for idx, c in enumerate(control):
-
-        means, errors = [], []
-
-        for i in independent:
-            data = load_measurements(i, c)
-
-            if data is not None:
-                values = extractor(data)
-            else:
-                values = []
-
-            # fallback
-            if len(values) == 0:
-                fb = fallback_select(i, c)
-                if fb is not None:
-                    values = fb[fallback_column]
-
-            if len(values) >= 2:
-                means.append(np.mean(values))
-                errors.append(np.std(values, ddof=1))
-            else:
-                means.append(np.nan)
-                errors.append(np.nan)
-
-        offset = (idx - (len(control) - 1) / 2) * bar_width
-
-        ax.bar(
-            x + offset,
-            means,
-            bar_width,
-            yerr=errors,
-            capsize=4,
-            edgecolor="black",
-            linewidth=0.6,
-            label=f"{c} Extrusions",
-        )
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(independent)
-    ax.set_xlabel("Temp, [°C]")
-    ax.set_ylabel(ylabel)
-    ax.set_ylim(min(means)-20)
-    ax.legend()
-    ax.grid(linestyle="--", alpha=0.3)
-
-    plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / filename, dpi=300)
-    plt.show()
-    
-grouped_bar_plot(
-    extrusions,
-    temperatures,
-    extractor=extract_peak_diameters,
-    fallback_column="Mean_nm",
-    ylabel="Peak Diameter (nm)",
-    filename="Diameter_Temp_plot.png",
-)
-
-grouped_bar_plot(
-    extrusions,
-    temperatures,
-    extractor=extract_sigmas,
-    fallback_column="Sigma_nm",
-    ylabel="Mean Standard Deviation (nm)",
-    filename="Sigma_Temp_plot.png",
-)
+plt.xlabel("Time since first measurement (days)")
+plt.ylabel("CONTIN Peaks[1] (daily average)")
+plt.legend(title="Temperature")
+plt.tight_layout()
+plt.show()
