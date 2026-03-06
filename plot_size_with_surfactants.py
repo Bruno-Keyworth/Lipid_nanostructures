@@ -20,10 +20,6 @@ from io import StringIO
 from get_filepaths import DATA_FOLDER
 from get_standard_deviation import fit_gaussian
 
-# -------------------------------------------------
-# Regex metadata extraction
-# -------------------------------------------------
-
 def extract_metadata(name):
 
     lipid_match = re.search(r"(\d+)\s+([A-Z0-9]+)\s*:\s*(\d+)\s+([A-Z0-9]+)", name)
@@ -158,8 +154,11 @@ def load_surfactant_results():
     return pd.DataFrame(rows)
 
 def plot_peak_vs_concentration(df):
+    # Filter to 7:3 fraction only
+    df = df[df["charged_fraction"] == 0.3]
+
     stats = (
-        df.groupby(["surfactant", "charged_fraction", "conc_microM"])
+        df.groupby(["surfactant", "conc_microM"])
           .agg(
               mean_peak=("peak_nm", "mean"),
               std_peak=("peak_nm", "std"),
@@ -169,53 +168,38 @@ def plot_peak_vs_concentration(df):
           .reset_index()
     )
 
-    groups = stats[["surfactant", "charged_fraction"]].drop_duplicates()
+    groups = stats["surfactant"].unique()
     cmap = cmc.hawaii.resampled(len(groups))
     colors = [mcolors.to_hex(cmap(i)) for i in range(cmap.N)]
 
-    # Peak size
-    plt.figure()
-    for i, (_, g) in enumerate(groups.iterrows()):
-        sub = stats[
-            (stats["surfactant"] == g["surfactant"]) &
-            (stats["charged_fraction"] == g["charged_fraction"])
-        ].sort_values("conc_microM")
-        label = f"{g['surfactant']} | f={g['charged_fraction']:.2f}"
-        plt.errorbar(
-            sub["conc_microM"],
-            sub["mean_peak"],
-            yerr=sub["std_peak"],
-            marker="o",
-            color=colors[i],
-            label=label
-        )
-    plt.xlabel("Surfactant concentration (µM)")
-    plt.ylabel("Peak size (nm)")
-    plt.title("Peak size vs surfactant concentration")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    # Peak width
-    plt.figure()
-    for i, (_, g) in enumerate(groups.iterrows()):
-        sub = stats[
-            (stats["surfactant"] == g["surfactant"]) &
-            (stats["charged_fraction"] == g["charged_fraction"])
-        ].sort_values("conc_microM")
-        label = f"{g['surfactant']} | f={g['charged_fraction']:.2f}"
-        plt.errorbar(
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    for i, surf in enumerate(groups):
+            sub = stats[stats["surfactant"] == surf].sort_values("conc_microM")
+            ax[0].errorbar(
+                sub["conc_microM"],
+                sub["mean_peak"],
+                yerr=sub["std_peak"],
+                marker="o",
+                color=colors[i],
+                label=surf
+            )
+    for i, surf in enumerate(groups):
+        sub = stats[stats["surfactant"] == surf].sort_values("conc_microM")
+        ax[1].errorbar(
             sub["conc_microM"],
             sub["mean_sigma"],
             yerr=sub["std_sigma"],
             marker="o",
             color=colors[i],
-            label=label
+            label=surf
         )
-    plt.xlabel("Surfactant concentration (µM)")
-    plt.ylabel("Peak width σ (nm)")
-    plt.title("Peak width vs surfactant concentration")
-    plt.legend()
+    for axes in ax:
+        axes.set_xlabel("Surfactant concentration (µM)")
+        axes.set_xscale('log')
+        axes.set_title("7 DMPC : 3 DMPG")
+        axes.legend()
+    ax[0].set_ylabel("Peak size (nm)")
+    ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
     plt.show()
 
@@ -237,11 +221,10 @@ def plot_peak_vs_fraction(df, fixed_conc=100):
     cmap = cmc.hawaii.resampled(len(unique_surfactants))
     colors = [mcolors.to_hex(cmap(i)) for i in range(cmap.N)]
 
-    # Peak size vs fraction
-    plt.figure()
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     for i, surf in enumerate(unique_surfactants):
         sub = stats[stats["surfactant"] == surf].sort_values("charged_fraction")
-        plt.errorbar(
+        ax[0].errorbar(
             sub["charged_fraction"],
             sub["mean_peak"],
             yerr=sub["std_peak"],
@@ -249,29 +232,22 @@ def plot_peak_vs_fraction(df, fixed_conc=100):
             color=colors[i],
             label=surf
         )
-    plt.xlabel("Charged lipid fraction")
-    plt.ylabel("Peak size (nm)")
-    plt.title(f"Peak size vs charged fraction (conc={fixed_conc} µM)")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    # Peak width vs fraction
-    plt.figure()
     for i, surf in enumerate(unique_surfactants):
         sub = stats[stats["surfactant"] == surf].sort_values("charged_fraction")
-        plt.errorbar(
+        ax[1].errorbar(
             sub["charged_fraction"],
             sub["mean_sigma"],
             yerr=sub["std_sigma"],
             marker="o",
             color=colors[i],
             label=surf
-        )
-    plt.xlabel("Charged lipid fraction")
-    plt.ylabel("Peak width σ (nm)")
-    plt.title(f"Peak width vs charged fraction (conc={fixed_conc} µM)")
-    plt.legend()
+            )
+    for axes in ax:
+        axes.set_xlabel("Charged lipid fraction")
+        axes.set_title(f"Surfactant Concentration = {fixed_conc} µM)")
+        axes.legend()
+    ax[0].set_ylabel("Peak size (nm)")
+    ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
     plt.show()
 
