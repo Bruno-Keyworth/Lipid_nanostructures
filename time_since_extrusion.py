@@ -271,7 +271,7 @@ def time_series_plot(extractor, fallback_column, ylabel):
             label=f"{t} °C"
         )
 
-    plt.xlabel("Time since first measurement (days)")
+    plt.xlabel("Time since extrusion (days)")
     plt.ylabel(ylabel)
     plt.legend(title="Temperature")
     plt.tight_layout()
