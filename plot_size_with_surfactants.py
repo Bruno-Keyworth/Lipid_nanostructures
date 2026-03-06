@@ -17,7 +17,7 @@ import cmcrameri.cm as cmc
 import matplotlib.colors as mcolors
 from io import StringIO
 
-from get_filepaths import DATA_FOLDER
+from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 from get_standard_deviation import fit_gaussian
 
 def extract_metadata(name):
@@ -201,6 +201,7 @@ def plot_peak_vs_concentration(df):
     ax[0].set_ylabel("Peak size (nm)")
     ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
+    plt.savefig(PLOTS_FOLDER / 'size_vs_surfactant_conc.png', dpi=300)
     plt.show()
 
 def plot_peak_vs_fraction(df, fixed_conc=100):
@@ -249,6 +250,7 @@ def plot_peak_vs_fraction(df, fixed_conc=100):
     ax[0].set_ylabel("Peak size (nm)")
     ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
+    plt.savefig(PLOTS_FOLDER / 'size_vs_lipid_fraction.png', dpi=300)
     plt.show()
 
 process_dls_surfactant("surfactants.csv")
