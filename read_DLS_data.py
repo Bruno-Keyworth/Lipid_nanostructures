@@ -5,116 +5,118 @@ Created on Tue Feb 17 09:35:58 2026
 
 @author: brunokeyworth
 """
-
 import os
 import json
 import pandas as pd
 import numpy as np
-from get_filepaths import _get_file, DATA_FOLDER
+from pathlib import Path
+from get_filepaths import DATA_FOLDER
 
-def process_dls_csv(
-    csv_path,
-    get_file=_get_file,
-    extrusions=(3, 5, 10, 15, 20, 31, 41),
-    temperatures=(10, 20, 30, 40, 50, 60),
-    encoding="latin1",
-    sep="\t"
-    ):
-    """
-    Read a DLS CSV file, group data by extrusion and temperature,
-    and write processed JSON files using get_file(t, e).
 
-    Parameters
-    ----------
-    csv_path : str or Path
-        Path to the input CSV file.
-    get_file : callable
-        Function get_file(temperature, extrusion) -> output filepath.
-    extrusions : iterable
-        Extrusion values to process.
-    temperatures : iterable
-        Temperature values to process.
-    encoding : str
-        File encoding.
-    sep : str
-        Column separator.
-    """
+def _parse_array(cell):
+    """Convert space-separated numeric string to numpy array."""
+    if pd.isna(cell):
+        return np.array([])
 
-    # ----------------------------
-    # Read CSV
-    # ----------------------------
+    values = []
+    for x in str(cell).split():
+        try:
+            values.append(float(x))
+        except ValueError:
+            continue
+
+    return np.array(values)
+
+def _safe_filename(name):
+    """Make a filesystem-safe filename."""
+    return (
+        name.replace(" ", "_")
+        .replace("/", "_")
+        .replace("(", "")
+        .replace(")", "")
+    )
+
+
+def process_dls_csv(csv_path, encoding="latin1", sep="\t"):
+
     df = pd.read_csv(
-        DATA_FOLDER / csv_path,
-        encoding=encoding,
-        sep=sep,
-        engine="python",
-        on_bad_lines="warn"
-    )
+    DATA_FOLDER / csv_path,
+    encoding=encoding,
+    sep=sep,
+    engine="python",
+    skiprows=[1],   # skip units row
+    on_bad_lines="warn"
+)
 
-    # ----------------------------
-    # Identify column groups
-    # ----------------------------
-    size_cols = [c for c in df.columns if c.startswith("Sizes[")]
-    intensity_cols = [c for c in df.columns if c.startswith("Intensities[")]
-    corr_cols = [c for c in df.columns if c.startswith("Correlation Data[")]
-    delay_cols = [c for c in df.columns if c.startswith("Correlation Delay Times[")]
-    volume_cols = [c for c in df.columns if c.startswith("Volumes[")]
+    # Remove header/unit duplicates if present
+    df = df[df["Sample Name"].notna()]
+    df = df[df["Sample Name"] != "Sample Name"]
 
-    scalar_cols = [
-        c for c in df.columns
-        if c not in size_cols + intensity_cols + corr_cols + delay_cols + volume_cols
-    ]
+    # Output directory
+    out_dir = DATA_FOLDER / "POPC"
+    os.makedirs(out_dir, exist_ok=True)
 
-    meta = df[scalar_cols].copy()
+    grouped = df.groupby("Sample Name")
 
-    # ----------------------------
-    # Clean rows
-    # ----------------------------
-    df_valid = df[df["Sample Name"] != "Sample Name"]
-    df_valid = df_valid.drop_duplicates(
-        subset=["Sample Name", "Measurement Date and Time"]
-    )
+    for sample_name, group in grouped:
 
-    # ----------------------------
-    # Loop over conditions
-    # ----------------------------
-    for e in extrusions:
-        for t in temperatures:
-            mask = df_valid["Sample Name"].str.split().apply(
-                lambda s: len(s) > 5 and s[0] == str(e) and s[5] == str(t)
-            )
+        data = []
 
-            subset = df_valid[mask]
-            file = get_file(t, e)
+        for _, row in group.iterrows():
 
-            print(f"Processing T={t}, extrusion={e}")
+            sizes = _parse_array(row["Sizes"])
+            intensities = _parse_array(row["Intensities"])
 
-            data = []
+            entry = {
+                "sample_name": sample_name,
+                "timestamp": row.get("Measurement Date and Time"),
+                "temperature_C": row.get("T"),
 
-            for i, row in subset.iterrows():
-                meta_dict = meta.iloc[i].to_dict()
+                "sizes_nm": sizes.tolist(),
+                "intensities_percent": intensities.tolist(),
 
-                size_row = row[size_cols].to_numpy()
-                intensity_row = row[intensity_cols].to_numpy()
-                volume_row = row[volume_cols].to_numpy()
-                correlation_row = row[corr_cols].to_numpy()
-                delay_row = row[delay_cols].to_numpy()
+                "peaks": [
+                    {
+                        "mean_nm": row.get("Pk 1 Mean Int"),
+                        "area_percent": row.get("Pk 1 Area Int"),
+                        "size_peak_nm": row.get("Size Peak")
+                    },
+                    {
+                        "mean_nm": row.get("Pk 2 Mean Int"),
+                        "area_percent": row.get("Pk 2 Area Int"),
+                        "size_peak_nm": row.get("Size Peak.1")
+                    },
+                    {
+                        "mean_nm": row.get("Pk 3 Mean Int"),
+                        "area_percent": row.get("Pk 3 Area Int"),
+                        "size_peak_nm": row.get("Size Peak.2")
+                    },
+                ],
 
-                data.append({
-                    "meta": meta_dict,
-                    "size": np.column_stack(
-                        (size_row, intensity_row, volume_row)
-                    ).T.tolist(),
-                    "correlation": np.column_stack(
-                        (correlation_row, delay_row)
-                    ).T.tolist(),
-                })
+                "z_average_nm": row.get("Z-Ave"),
+                "pdi": row.get("PdI"),
 
-            if data:
-                os.makedirs(os.path.dirname(file), exist_ok=True)
-                with open(file, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-                    
-                    
-                    
-process_dls_csv("data.csv")
+                # store remaining metadata as well
+                "metadata": {
+                    k: row[k]
+                    for k in row.index
+                    if k not in [
+                        "Sample Name",
+                        "Measurement Date and Time",
+                        "T",
+                        "Sizes",
+                        "Intensities"
+                    ]
+                }
+            }
+
+            data.append(entry)
+
+        file_name = _safe_filename(sample_name) + ".json"
+        file_path = out_dir / file_name
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+
+process_dls_csv("POPC_temp_extrusion_size.txt")

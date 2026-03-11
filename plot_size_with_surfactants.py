@@ -247,6 +247,7 @@ def plot_peak_vs_fraction(df, fixed_conc=100):
         axes.set_xlabel("Charged lipid fraction")
         axes.set_title(f"Surfactant Concentration = {fixed_conc} µM)")
         axes.legend()
+        axes.set_yscale('log')
     ax[0].set_ylabel("Peak size (nm)")
     ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
