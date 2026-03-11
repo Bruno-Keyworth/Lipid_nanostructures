@@ -5,36 +5,36 @@ Created on Thu Feb 26 12:12:38 2026
 
 @author: brunokeyworth
 """
-
 import os
 import json
-import pandas as pd
 import numpy as np
+import pandas as pd
 import re
 from pathlib import Path
 import matplotlib.pyplot as plt
 import cmcrameri.cm as cmc
 import matplotlib.colors as mcolors
-from io import StringIO
 
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 from get_standard_deviation import fit_gaussian
 
 def extract_metadata(name):
-
-    lipid_match = re.search(r"(\d+)\s+([A-Z0-9]+)\s*:\s*(\d+)\s+([A-Z0-9]+)", name)
-    surf_match = re.search(r"\b(C\d+E\d+|DDAC|TX100|NONE)\b", name)
-    conc_match = re.search(r"(\d+\.?\d*)\s*microM", name)
-
+    # Match lipid counts
+    lipid_match = re.search(r"(\d+)\s*([A-Z0-9]+)\s*:\s*(\d+)\s*([A-Z0-9]+)", name)
     if lipid_match:
         n1, l1, n2, l2 = lipid_match.groups()
         n1, n2 = int(n1), int(n2)
-        frac = n2 / (n1 + n2)
+        frac = n2 / (n1 + n2) if (n1 + n2) > 0 else 0
     else:
         l1 = l2 = None
         frac = np.nan
 
+    # Match surfactant
+    surf_match = re.search(r"\b(C\d+E\d+|DDAC|TX100|NONE)\b", name)
     surfactant = surf_match.group(1) if surf_match else None
+
+    # Match surfactant concentration
+    conc_match = re.search(r"(\d+\.?\d*)\s*microM", name)
     conc = float(conc_match.group(1)) if conc_match else np.nan
 
     return {
@@ -45,128 +45,78 @@ def extract_metadata(name):
         "surfactant_conc_microM": conc
     }
 
-def process_dls_surfactant(csv_path, encoding="latin1", sep="\t"):
-    with open(DATA_FOLDER / csv_path, "r", encoding=encoding) as f:
-        text = f.read()
-
-    # Fix missing space between surfactant name and concentration
-    # e.g. 'C12E6100' -> 'C12E6 100'
-    text = re.sub(r'(C\d+E\d+)(\d+)', r'\1 \2', text)
-
-    # Load into DataFrame
-    df = pd.read_csv(
-        StringIO(text),
-        sep=sep,
-        engine="python",
-        on_bad_lines="skip"
-    )
-
-    size_cols = [c for c in df.columns if c.startswith("Sizes[")]
-    intensity_cols = [c for c in df.columns if c.startswith("Intensities[")]
-    volume_cols = [c for c in df.columns if c.startswith("Volumes[")]
-
-    corr_cols = [c for c in df.columns if c.startswith("Correlation Data[")]
-    delay_cols = [c for c in df.columns if c.startswith("Correlation Delay Times[")]
-
-    scalar_cols = [
-        c for c in df.columns
-        if c not in size_cols + intensity_cols + volume_cols + corr_cols + delay_cols
-    ]
-
-    df_valid = df[df["Sample Name"] != "Sample Name"]
-
-    df_valid = df_valid.drop_duplicates(
-        subset=["Sample Name", "Measurement Date and Time"]
-    )
-
-    data = []
-
-    for _, row in df_valid.iterrows():
-
-        name = row["Sample Name"]
-
-        meta = row[scalar_cols].to_dict()
-        parsed = extract_metadata(name)
-
-        size_row = row[size_cols].to_numpy()
-        intensity_row = row[intensity_cols].to_numpy()
-        volume_row = row[volume_cols].to_numpy()
-
-        corr_row = row[corr_cols].to_numpy()
-        delay_row = row[delay_cols].to_numpy()
-
-        data.append({
-            "meta": meta,
-            "parsed": parsed,
-            "size": np.column_stack(
-                (size_row, intensity_row, volume_row)
-            ).T.tolist(),
-            "correlation": np.column_stack(
-                (corr_row, delay_row)
-            ).T.tolist(),
-        })
-
-    outfile = DATA_FOLDER / "surfactant" / "surfactant_dls.json"
-
-    os.makedirs(outfile.parent, exist_ok=True)
-
-    with open(outfile, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-def load_surfactant_results():
-
-    file = DATA_FOLDER / "surfactant" / "surfactant_dls.json"
-
-    with open(file) as f:
-        data = json.load(f)
-
+# --- Loading function ---
+def load_surfactant_results_from_json(subfolder: str) -> pd.DataFrame:
+    """
+    Load all JSON files from DATA_FOLDER / subfolder.
+    """
+    folder_path = DATA_FOLDER / subfolder
     rows = []
 
-    for m in data:
+    for file_path in folder_path.glob("*.json"):
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        for entry in data:
+            entry["filename"] = file_path.name
+            rows.append(entry)
 
-        meta = m["meta"]
-        parsed = m["parsed"]
+    df = pd.DataFrame(rows)
+    if "sample_name" not in df.columns:
+        raise ValueError("Your JSON files must contain 'sample_name' field")
 
-        try:
-            peak = float(meta["CONTIN Peaks[1]"])
-        except:
-            continue
+    # Compute charged_fraction
+    def compute_charged_fraction(name: str) -> float:
+        match = re.search(r"(\d+)\s*[A-Z]+\s*:\s*(\d+)\s*[A-Z]+", name)
+        if match:
+            n1, n2 = int(match.group(1)), int(match.group(2))
+            return n2 / (n1 + n2)
+        else:
+            return np.nan
 
-        try:
-            sizes = np.asarray(m["size"][0], float)
-            intensities = np.asarray(m["size"][1], float)
+    df["charged_fraction"] = df["sample_name"].apply(compute_charged_fraction)
 
-            stacked = np.column_stack((sizes, intensities))
-            sigma = fit_gaussian(stacked, PLOT=False)
+    # Extract surfactant
+    def extract_surfactant(name: str) -> str:
+        match = re.search(r"mg_ml\s*([A-Za-z0-9]+)", name)
+        return match.group(1) if match else "NONE"
 
-        except:
-            sigma = np.nan
+    # Extract concentration
+    def extract_conc_microM(name: str) -> float:
+        match = re.search(r"(\d+)\s*microM", name)
+        return float(match.group(1)) if match else 0.0
 
-        rows.append({
-            "peak_nm": peak,
-            "sigma_nm": sigma,
-            "surfactant": parsed["surfactant"],
-            "conc_microM": parsed["surfactant_conc_microM"],
-            "charged_fraction": parsed["charged_fraction"]
-        })
+    df["surfactant"] = df["sample_name"].apply(extract_surfactant)
+    df["conc_microM"] = df["sample_name"].apply(extract_conc_microM)
 
-    return pd.DataFrame(rows)
+    return df
 
-def plot_peak_vs_concentration(df):
-    # Filter to 7:3 fraction only
-    df = df[df["charged_fraction"] == 0.3]
+def largest_area_peak(peaks):
+    if not peaks:
+        return pd.Series({"peak_nm": np.nan, "sigma_nm": np.nan})
+    peak = max(peaks, key=lambda p: p.get("area_percent", 0))
+    return pd.Series({"peak_nm": peak.get("mean_nm", np.nan),
+                      "sigma_nm": peak.get("size_peak_nm", np.nan)})
+
+def plot_peak_vs_concentration(df, charged_fraction_filter=0.3):
+    # Only use size measurements
+    df_size = df[df["type"] == "size"]
+
+    # Filter for desired charged fraction
+    df_size = df_size[df_size["charged_fraction"] == charged_fraction_filter]
+
+    # Extract the peak with largest area
+
+    df_size[["peak_nm", "sigma_nm"]] = df_size["peaks"].apply(largest_area_peak)
 
     stats = (
-        df.groupby(["surfactant", "conc_microM"])
-          .agg(
-              mean_peak=("peak_nm", "mean"),
-              std_peak=("peak_nm", "std"),
-              mean_sigma=("sigma_nm", "mean"),
-              std_sigma=("sigma_nm", "std")
-          )
-          .reset_index()
+        df_size.groupby(["surfactant", "conc_microM"])
+               .agg(mean_peak=("peak_nm", "mean"),
+                    std_peak=("peak_nm", "std"),
+                    mean_sigma=("sigma_nm", "mean"),
+                    std_sigma=("sigma_nm", "std"))
+               .reset_index()
     )
+
 
     groups = stats["surfactant"].unique()
     cmap = cmc.hawaii.resampled(len(groups))
@@ -174,25 +124,10 @@ def plot_peak_vs_concentration(df):
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     for i, surf in enumerate(groups):
-            sub = stats[stats["surfactant"] == surf].sort_values("conc_microM")
-            ax[0].errorbar(
-                sub["conc_microM"],
-                sub["mean_peak"],
-                yerr=sub["std_peak"],
-                marker="o",
-                color=colors[i],
-                label=surf
-            )
-    for i, surf in enumerate(groups):
         sub = stats[stats["surfactant"] == surf].sort_values("conc_microM")
-        ax[1].errorbar(
-            sub["conc_microM"],
-            sub["mean_sigma"],
-            yerr=sub["std_sigma"],
-            marker="o",
-            color=colors[i],
-            label=surf
-        )
+        ax[0].errorbar(sub["conc_microM"], sub["mean_peak"], yerr=sub["std_peak"], marker="o", color=colors[i], label=surf)
+        ax[1].errorbar(sub["conc_microM"], sub["mean_sigma"], yerr=sub["std_sigma"], marker="o", color=colors[i], label=surf)
+
     for axes in ax:
         axes.set_xlabel("Surfactant concentration (µM)")
         axes.set_xscale('log')
@@ -205,16 +140,17 @@ def plot_peak_vs_concentration(df):
     plt.show()
 
 def plot_peak_vs_fraction(df, fixed_conc=100):
-    df_fixed = df[df["conc_microM"] == fixed_conc]
+    df_size = df[df["type"] == "size"]
+    df_fixed = df_size[df_size["conc_microM"] == fixed_conc]
+
+    df_fixed[["peak_nm", "sigma_nm"]] = df_fixed["peaks"].apply(largest_area_peak)
 
     stats = (
         df_fixed.groupby(["surfactant", "charged_fraction"])
-                .agg(
-                    mean_peak=("peak_nm", "mean"),
-                    std_peak=("peak_nm", "std"),
-                    mean_sigma=("sigma_nm", "mean"),
-                    std_sigma=("sigma_nm", "std")
-                )
+                .agg(mean_peak=("peak_nm", "mean"),
+                     std_peak=("peak_nm", "std"),
+                     mean_sigma=("sigma_nm", "mean"),
+                     std_sigma=("sigma_nm", "std"))
                 .reset_index()
     )
 
@@ -225,37 +161,22 @@ def plot_peak_vs_fraction(df, fixed_conc=100):
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     for i, surf in enumerate(unique_surfactants):
         sub = stats[stats["surfactant"] == surf].sort_values("charged_fraction")
-        ax[0].errorbar(
-            sub["charged_fraction"],
-            sub["mean_peak"],
-            yerr=sub["std_peak"],
-            marker="o",
-            color=colors[i],
-            label=surf
-        )
-    for i, surf in enumerate(unique_surfactants):
-        sub = stats[stats["surfactant"] == surf].sort_values("charged_fraction")
-        ax[1].errorbar(
-            sub["charged_fraction"],
-            sub["mean_sigma"],
-            yerr=sub["std_sigma"],
-            marker="o",
-            color=colors[i],
-            label=surf
-            )
+        ax[0].errorbar(sub["charged_fraction"], sub["mean_peak"], yerr=sub["std_peak"], marker="o", color=colors[i], label=surf)
+        ax[1].errorbar(sub["charged_fraction"], sub["mean_sigma"], yerr=sub["std_sigma"], marker="o", color=colors[i], label=surf)
+
     for axes in ax:
         axes.set_xlabel("Charged lipid fraction")
-        axes.set_title(f"Surfactant Concentration = {fixed_conc} µM)")
-        axes.legend()
+        axes.set_title(f"Surfactant Concentration = {fixed_conc} µM")
         axes.set_yscale('log')
+        axes.legend()
     ax[0].set_ylabel("Peak size (nm)")
     ax[1].set_ylabel("Peak width σ (nm)")
     plt.tight_layout()
     plt.savefig(PLOTS_FOLDER / 'size_vs_lipid_fraction.png', dpi=300)
     plt.show()
 
-process_dls_surfactant("surfactants.csv")
-df = load_surfactant_results()
 
+# --- Usage ---
+df = load_surfactant_results_from_json("surfactants")
 plot_peak_vs_concentration(df)
 plot_peak_vs_fraction(df)
