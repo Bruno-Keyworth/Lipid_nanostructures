@@ -7,6 +7,7 @@ Created on Wed Mar  4 09:45:00 2026
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,7 +18,6 @@ import matplotlib.colors as mcolors
 import cmcrameri.cm as cmc
 
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
-
 
 # ==========================================================
 # STYLE
@@ -60,32 +60,39 @@ def extract_lipid_ratio(name):
 
 
 # ==========================================================
-# DATA LOADING
+# DATA LOADING (JSON)
 # ==========================================================
 
-def load_data(filepath):
+def load_surfactant_json(folder: Path) -> pd.DataFrame:
+    """
+    Loads all JSON files in a surfactants folder.
+    Expects each JSON file to be a list of dicts with at least:
+        - 'sample_name'
+        - 'zeta_mV'
+    """
+    rows = []
+    for file_path in folder.glob("*.json"):
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        for entry in data:
+            if entry.get("type") == "zeta":  # Only keep Zeta measurements
+                rows.append({
+                    "Sample Name": entry.get("sample_name"),
+                    "ZP": entry.get("zeta_mV")
+                })
 
-    df = pd.read_csv(
-        filepath,
-        sep="\t",
-        skiprows=[1]
-    )
-
-    df.columns = df.columns.str.strip()
-
-    df["Measurement Date and Time"] = pd.to_datetime(
-        df["Measurement Date and Time"],
-        dayfirst=True,
-        errors="coerce"
-    )
-
-    df = (
-        df.sort_values("Measurement Date and Time")
-          .drop_duplicates(subset="Sample Name", keep="last")
-    )
-
-    df = df[["Sample Name", "ZP"]].dropna()
+    df = pd.DataFrame(rows)
+    if df.empty:
+        raise ValueError(f"No Zeta data found in {folder}")
     df["ZP"] = df["ZP"].astype(float)
+    return df
+
+
+# ==========================================================
+# DATA CLEANING
+# ==========================================================
+
+def clean_zeta_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     df["surfactant"] = df["Sample Name"].apply(extract_surfactant)
     df["conc_microM"] = df["Sample Name"].apply(extract_microM)
@@ -95,7 +102,6 @@ def load_data(filepath):
     df["ratio_label"] = ratios.apply(lambda x: x[1])
 
     df = df.dropna(subset=["conc_microM", "charged_fraction", "ZP"])
-
     return df
 
 
@@ -104,13 +110,11 @@ def load_data(filepath):
 # ==========================================================
 
 def grouped_stats(df, group_cols):
-
     stats = (
         df.groupby(group_cols)["ZP"]
           .agg(["mean", "std"])
           .reset_index()
     )
-
     return stats
 
 
@@ -121,15 +125,12 @@ def grouped_stats(df, group_cols):
 def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 
     unique_groups = stats[group_cols].drop_duplicates()
-
     markers, linestyles = setup_plot_style(len(unique_groups))
-
     plt.figure(figsize=(10, 6))
 
     for _, row in unique_groups.iterrows():
 
         mask = np.ones(len(stats), dtype=bool)
-
         for col in group_cols:
             mask &= stats[col] == row[col]
 
@@ -137,7 +138,6 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 
         ls = next(linestyles)
         mk = next(markers)
-
         label = " | ".join(str(row[col]) for col in group_cols)
 
         plt.errorbar(
@@ -158,23 +158,16 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
     plt.grid(alpha=0.4)
     plt.legend(bbox_to_anchor=(1.22, 0.5), loc="center")
     plt.tight_layout()
-
     plt.savefig(PLOTS_FOLDER / save_name, dpi=300)
     plt.show()
 
 
 # ==========================================================
-# FIGURE 1
-# ZETA vs SURFACTANT CONCENTRATION
+# FIGURES
 # ==========================================================
 
 def plot_zeta_vs_concentration(df):
-
-    stats = grouped_stats(
-        df,
-        ["surfactant", "ratio_label", "conc_microM"]
-    )
-
+    stats = grouped_stats(df, ["surfactant", "ratio_label", "conc_microM"])
     plot_errorbars(
         stats,
         x="conc_microM",
@@ -186,20 +179,9 @@ def plot_zeta_vs_concentration(df):
     )
 
 
-# ==========================================================
-# FIGURE 2
-# ZETA vs CHARGED FRACTION (FIXED SURFACTANT CONC)
-# ==========================================================
-
 def plot_zeta_vs_fraction(df, fixed_conc=100):
-
-    df_fixed = df[df["conc_microM"] == fixed_conc]
-
-    stats = grouped_stats(
-        df_fixed,
-        ["surfactant", "charged_fraction"]
-    )
-
+    df_fixed = df[np.isclose(df["conc_microM"], fixed_conc) | np.isclose(df["conc_microM"], 0)]
+    stats = grouped_stats(df_fixed, ["surfactant", "charged_fraction"])
     plot_errorbars(
         stats,
         x="charged_fraction",
@@ -210,13 +192,18 @@ def plot_zeta_vs_fraction(df, fixed_conc=100):
         save_name="ZETA_vs_charged_fraction.png"
     )
 
+
+# ==========================================================
+# MAIN
+# ==========================================================
+
 def main():
+    surf_folder = DATA_FOLDER / "surfactants"
+    df = load_surfactant_json(surf_folder)
+    df_clean = clean_zeta_dataframe(df)
 
-    filepath = DATA_FOLDER / "surfactant" / "surfactant_zeta.txt"
-    df = load_data(filepath)
-
-    plot_zeta_vs_concentration(df)
-    plot_zeta_vs_fraction(df, fixed_conc=100)
+    plot_zeta_vs_concentration(df_clean)
+    plot_zeta_vs_fraction(df_clean, fixed_conc=100)
 
 
 if __name__ == "__main__":
