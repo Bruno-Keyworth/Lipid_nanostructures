@@ -7,167 +7,129 @@ Created on Tue Feb 24 13:52:29 2026
 """
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 import json
-import sys
 from pathlib import Path
-from datetime import datetime
-from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
+from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
+import re
 
-# --- fix imports ---
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT))
+# ----------------------------
+# Load measurements from JSON
+# ----------------------------
+def load_measurements(folder="POPC"):
+    """
+    Load all JSON data from the folder.
+    Extract temperature and extrusion from sample_name.
+    Choose peak with largest area.
+    """
+    folder_path = DATA_FOLDER / folder
+    entries = []
 
-from get_filepaths import _get_file, DATA_FOLDER
-
-extrusion = 31
-temperatures = [10, 20, 30, 40, 50, 60]
-time_format = "%d %B %Y %H:%M:%S"
-
-# -------------------------------------------------
-# Load fallback data
-# -------------------------------------------------
-fallback_path = DATA_FOLDER / "unrecorded_data.txt"
-try:
-    fallback_data = np.genfromtxt(
-        fallback_path,
-        delimiter=",",
-        names=True,
-        dtype=None,
-        encoding="utf-8"
-    )
-except Exception:
-    fallback_data = None
-
-
-def fallback_select(temp, extrusion):
-    if fallback_data is None:
-        return None
-
-    mask = (
-        (fallback_data["Temp"] == temp) &
-        (fallback_data["Extrusion"] == extrusion)
-    )
-
-    selected = fallback_data[mask]
-    return selected if len(selected) > 0 else None
-
-
-# -------------------------------------------------
-# First pass: find global earliest measurement date
-# -------------------------------------------------
-all_dates = []
-
-for t in temperatures:
-    try:
-        with open(_get_file(t, extrusion), "r", encoding="utf-8") as f:
+    for file_path in folder_path.glob("*.json"):
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except Exception:
-        data = None
 
-    if data is not None:
-        for d in data:
-            meta = d["meta"]
-            if "Measurement Date and Time" in meta:
-                try:
-                    dt = datetime.strptime(
-                        meta["Measurement Date and Time"],
-                        time_format
-                    )
-                    all_dates.append(dt.date())
-                except (ValueError, TypeError):
-                    pass
+        for entry in data:
+            sample_name = entry.get("sample_name", "")
 
-    else:
-        fb = fallback_select(t, extrusion)
-        if fb is not None and "Date" in fb.dtype.names:
-            for d in fb["Date"]:
-                try:
-                    dt = datetime.strptime(d, "%Y-%m-%d").date()
-                    all_dates.append(dt)
-                except Exception:
-                    pass
+            # Extract extrusion from sample_name
+            extrusion_match = re.search(r"(\d+)\s+Extrusion", sample_name)
+            entry["extrusion"] = int(extrusion_match.group(1)) if extrusion_match else 0
 
-if not all_dates:
-    raise RuntimeError("No valid measurement dates found.")
+            # Extract temperature from sample_name
+            temp_match = re.search(r"(\d+)\s+degrees", sample_name)
+            entry["temperature_C"] = float(temp_match.group(1)) if temp_match else 0
 
-global_date0 = min(all_dates)
+            # pick peak with largest area
+            if entry.get("peaks"):
+                peak = max(entry["peaks"], key=lambda x: float(x.get("area_percent") or 0))
+                entry["peak_size_nm"] = float(peak.get("mean_nm") or 0)
+                entry["peak_sigma_nm"] = float(peak.get("size_peak_nm") or 0)
 
-# -------------------------------------------------
-# Second pass: plotting
-# -------------------------------------------------
-plt.figure()
+            entries.append(entry)
 
-for t in temperatures:
+    return entries
 
-    try:
-        with open(_get_file(t, extrusion), "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        data = None
+# ----------------------------
+# Extractors
+# ----------------------------
+def extract_peak_diameters(data):
+    return [d["peak_size_nm"] for d in data if "peak_size_nm" in d and d["peak_size_nm"] > 0]
 
-    day_values = defaultdict(list)
+def extract_sigmas(data):
+    return [d["peak_sigma_nm"] for d in data if "peak_sigma_nm" in d and d["peak_sigma_nm"] > 0]
 
-    if data is not None:
+# ----------------------------
+# Grouped bar plot
+# ----------------------------
+def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="POPC"):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(independent))
+    bar_width = 0.8 / len(control)
 
-        for d in data:
-            meta = d["meta"]
+    # Load all data once
+    all_data = load_measurements(folder)
 
-            if (
-                "CONTIN Peaks[1]" not in meta or
-                "Measurement Date and Time" not in meta
-            ):
-                continue
+    for idx, c in enumerate(control):
+        means, errors = [], []
 
-            try:
-                peak = float(meta["CONTIN Peaks[1]"])
-                dt = datetime.strptime(
-                    meta["Measurement Date and Time"],
-                    time_format
-                ).date()
-            except (ValueError, TypeError):
-                continue
+        for i in independent:
+            # filter by temperature and extrusion
+            data = [d for d in all_data if d["temperature_C"] == i and d["extrusion"] == c]
+            values = extractor(data)
+            if len(values) >= 2:
+                means.append(np.mean(values))
+                errors.append(np.std(values, ddof=1))
+            else:
+                means.append(np.nan)
+                errors.append(np.nan)
 
-            day_values[dt].append(peak)
+        offset = (idx - (len(control) - 1) / 2) * bar_width
 
-    # ---------------- fallback ----------------
-    if not day_values:
-        fb = fallback_select(t, extrusion)
+        ax.bar(
+            x + offset,
+            means,
+            bar_width,
+            yerr=errors,
+            capsize=4,
+            edgecolor="black",
+            linewidth=0.6,
+            label=f"{c} Extrusions",
+        )
 
-        if fb is not None and "Date" in fb.dtype.names:
-            for d, peak in zip(fb["Date"], fb["Mean_nm"]):
-                try:
-                    dt = datetime.strptime(d, "%Y-%m-%d").date()
-                    day_values[dt].append(float(peak))
-                except Exception:
-                    continue
+    ax.set_xticks(x)
+    ax.set_xticklabels(independent)
+    ax.set_xlabel("Temperature [°C]")
+    ax.set_ylabel(ylabel)
+    ax.legend()
+    ax.grid(linestyle="--", alpha=0.3)
 
-    if not day_values:
-        continue
+    plt.tight_layout()
+    plt.savefig(PLOTS_FOLDER / filename, dpi=300)
+    plt.show()
 
-    days_sorted = sorted(day_values.keys())
+# ----------------------------
+# Usage
+# ----------------------------
+if __name__ == "__main__":
+    extrusions = [3, 5, 10, 15, 20, 31, 41]
+    temperatures = [10, 20, 30, 40, 50, 60]
 
-    elapsed_days = [
-        (day - global_date0).days
-        for day in days_sorted
-    ]
-
-    peaks_avg = [
-        np.mean(day_values[day])
-        for day in days_sorted
-    ]
-
-    plt.plot(
-        elapsed_days,
-        peaks_avg,
-        marker="o",
-        label=f"{t} °C"
+    grouped_bar_plot(
+        extrusions,
+        temperatures,
+        extractor=extract_peak_diameters,
+        ylabel="Peak Diameter (nm)",
+        filename="Diameter_Temp_plot.png",
+        folder="POPC"
     )
 
-plt.xlabel("Time since first measurement (days)")
-plt.ylabel("CONTIN Peaks[1] (daily average)")
-plt.legend(title="Temperature")
-plt.tight_layout()
-plt.show()
+    grouped_bar_plot(
+        extrusions,
+        temperatures,
+        extractor=extract_sigmas,
+        ylabel="Mean Standard Deviation (nm)",
+        filename="Sigma_Temp_plot.png",
+        folder="POPC"
+    )
