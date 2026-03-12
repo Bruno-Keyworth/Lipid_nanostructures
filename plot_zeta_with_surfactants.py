@@ -164,6 +164,19 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
     plt.savefig(PLOTS_FOLDER / save_name, dpi=300)
     plt.show()
 
+def remove_single_concentration_groups(df):
+
+    conc_counts = (
+        df.groupby(["surfactant", "lipid_label"])["conc_microM"]
+        .nunique()
+        .reset_index(name="n_conc")
+    )
+
+    valid = conc_counts[conc_counts["n_conc"] > 1][["surfactant", "lipid_label"]]
+
+    df_filtered = df.merge(valid, on=["surfactant", "lipid_label"])
+
+    return df_filtered
 
 # ==========================================================
 # FIGURES
@@ -196,6 +209,7 @@ def plot_zeta_vs_concentration(df):
             augmented_rows.append(temp)
 
     df_augmented = pd.concat(augmented_rows, ignore_index=True)
+    df_augmented = remove_single_concentration_groups(df_augmented)
 
     stats = grouped_stats(df_augmented, ["surfactant", "lipid_label", "conc_microM"])
 
