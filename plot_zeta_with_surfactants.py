@@ -268,8 +268,8 @@ def plot_zeta_vs_fraction(df, fixed_conc=100):
         stats,
         x="charged_fraction",
         group_cols=["surfactant", "lipid_label"],
-        title=f"Zeta vs charged fraction ({fixed_conc} µM)",
-        xlabel="Charged lipid fraction",
+        title=f"Zeta for DMPC:DMPG (surfactant concentration = {fixed_conc} µM)",
+        xlabel="DMPG fraction",
         ylabel="Zeta potential (mV)",
         save_name="ZETA_vs_charged_fraction.png"
     )
