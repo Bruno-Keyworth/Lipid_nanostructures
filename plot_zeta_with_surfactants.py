@@ -54,7 +54,10 @@ def extract_lipid_ratio(name):
     if m:
         n1, l1, n2, l2 = int(m.group(1)), m.group(2), int(m.group(3)), m.group(4)
         frac = n2 / (n1 + n2)
-        label = f"{n1}:{n2} {l1}:{l2}"
+        if frac > 0:
+            label = f"{n1}:{n2} {l1}:{l2}"
+        else: 
+            label = l1
         return frac, label
     return np.nan, "Unknown"
 
@@ -170,7 +173,7 @@ def plot_zeta_vs_concentration(df):
 
     allowed_ratios = {
         "7:3 DMPC:DMPG",
-        "10:0 POPC:POPG"
+        "POPC"
     }
 
     df_filtered = df[df["ratio_label"].isin(allowed_ratios)]
