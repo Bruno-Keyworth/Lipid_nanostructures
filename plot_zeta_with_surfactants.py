@@ -67,28 +67,37 @@ def extract_lipid_ratio(name):
 # ==========================================================
 
 def load_surfactant_json(folder: Path) -> pd.DataFrame:
-    """
-    Loads all JSON files in a surfactants folder.
-    Expects each JSON file to be a list of dicts with at least:
-        - 'sample_name'
-        - 'zeta_mV'
-    """
+
     rows = []
+
     for file_path in folder.glob("*.json"):
         with open(file_path, "r") as f:
             data = json.load(f)
+
         for entry in data:
-            if entry.get("type") == "zeta":  # Only keep Zeta measurements
+            if entry.get("type") == "zeta":
                 rows.append({
                     "Sample Name": entry.get("sample_name"),
-                    "ZP": entry.get("zeta_mV")
+                    "ZP": entry.get("zeta_mV"),
+                    "timestamp": entry.get("timestamp")
                 })
 
     df = pd.DataFrame(rows)
+
     if df.empty:
         raise ValueError(f"No Zeta data found in {folder}")
+
     df["ZP"] = df["ZP"].astype(float)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+    df = (
+        df.sort_values("timestamp")
+          .drop_duplicates(subset="Sample Name", keep="last")
+    )
+
+
     return df
+
 
 
 # ==========================================================
