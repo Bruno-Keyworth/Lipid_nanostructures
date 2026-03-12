@@ -30,7 +30,7 @@ def _safe_filename(name):
         name.replace(" ", "_")
             .replace("/", "_")
             .replace("(", "")
-            .replace(")", "")
+            .replace(")", "").replace(':', '')
     )
 
 def base_sample_name(name):
