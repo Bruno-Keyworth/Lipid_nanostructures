@@ -55,7 +55,7 @@ def extract_lipid_ratio(name):
         n1, l1, n2, l2 = int(m.group(1)), m.group(2), int(m.group(3)), m.group(4)
         frac = n2 / (n1 + n2)
         if frac > 0:
-            label = f"{n1}:{n2} {l1}:{l2}"
+            label = f"{l1}:{l2}"
         else: 
             label = l1
         return frac, label
@@ -102,7 +102,7 @@ def clean_zeta_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     ratios = df["Sample Name"].apply(extract_lipid_ratio)
     df["charged_fraction"] = ratios.apply(lambda x: x[0])
-    df["ratio_label"] = ratios.apply(lambda x: x[1])
+    df["lipid_label"] = ratios.apply(lambda x: x[1])
 
     df = df.dropna(subset=["conc_microM", "charged_fraction", "ZP"])
     return df
@@ -172,18 +172,37 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 def plot_zeta_vs_concentration(df):
 
     allowed_ratios = {
-        "7:3 DMPC:DMPG",
+        "DMPC:DMPG",
         "POPC"
     }
 
-    df_filtered = df[df["ratio_label"].isin(allowed_ratios)]
+    df = df[df["lipid_label"].isin(allowed_ratios)]
 
-    stats = grouped_stats(df_filtered, ["surfactant", "ratio_label", "conc_microM"])
+    # Separate baseline (no surfactant)
+    df_none = df[df["surfactant"] == "NONE"]
+    df_real = df[df["surfactant"] != "NONE"]
+
+    augmented_rows = [df_real]
+
+    for ratio in df["lipid_label"].unique():
+
+        base = df_none[df_none["lipid_label"] == ratio]
+
+        surfactants = df_real[df_real["lipid_label"] == ratio]["surfactant"].unique()
+
+        for s in surfactants:
+            temp = base.copy()
+            temp["surfactant"] = s
+            augmented_rows.append(temp)
+
+    df_augmented = pd.concat(augmented_rows, ignore_index=True)
+
+    stats = grouped_stats(df_augmented, ["surfactant", "lipid_label", "conc_microM"])
 
     plot_errorbars(
         stats,
         x="conc_microM",
-        group_cols=["surfactant", "ratio_label"],
+        group_cols=["surfactant", "lipid_label"],
         title="Zeta potential vs surfactant concentration",
         xlabel="Surfactant concentration (µM)",
         ylabel="Zeta potential (mV)",
