@@ -97,8 +97,13 @@ global_date0 = find_global_start()
 # ----------------------------
 # plotting
 # ----------------------------
-def time_series_plot(extractor, ylabel):
-    plt.figure()
+def time_series_bar_plot(extractor, ylabel):
+    """
+    Generate a grouped bar chart of mean values over temperatures for each day
+    since extrusion, similar to grouped_bar_plot style.
+    """
+    # Collect data: for each temperature, get mean per day
+    day_values_per_temp = {}
     for t in temperatures:
         day_values = defaultdict(list)
         for entry in all_entries:
@@ -112,29 +117,55 @@ def time_series_plot(extractor, ylabel):
                 continue
             try:
                 dt = datetime.strptime(ts, time_format).date()
-                day_values[dt].append(value)
+                elapsed_days = (dt - global_date0).days
+                day_values[elapsed_days].append(value)
             except Exception:
                 continue
+        if day_values:
+            day_values_per_temp[t] = day_values
 
-        if not day_values:
-            continue
+    # Determine all days present across temperatures
+    all_days = sorted(set(day for day_values in day_values_per_temp.values() for day in day_values))
 
-        days_sorted = sorted(day_values.keys())
-        elapsed_days = [(day - global_date0).days for day in days_sorted]
-        means = [np.mean(day_values[day]) for day in days_sorted]
+    # Prepare plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(all_days))
+    bar_width = 0.8 / len(temperatures)
 
-        plt.plot(elapsed_days, means, marker="o", label=f"{t} °C")
+    for idx, t in enumerate(temperatures):
+        means, errors = [], []
+        day_values = day_values_per_temp.get(t, {})
+        for day in all_days:
+            values = day_values.get(day, [])
+            if values:
+                means.append(np.mean(values))
+                errors.append(np.std(values, ddof=1))
+            else:
+                means.append(np.nan)
+                errors.append(np.nan)
+        offset = (idx - (len(temperatures) - 1) / 2) * bar_width
+        ax.bar(
+            x + offset,
+            means,
+            bar_width,
+            yerr=errors,
+            capsize=4,
+            edgecolor="black",
+            linewidth=0.6,
+            label=f"{t} °C",
+        )
 
-    plt.xlabel("Time since extrusion (days)")
-    plt.ylabel(ylabel)
-    plt.legend(title="Temperature")
+    ax.set_xticks(x)
+    ax.set_xticklabels(all_days)
+    ax.set_xlabel("Time since extrusion (days)")
+    ax.set_ylabel(ylabel)
+    ax.legend(title="Temperature")
+    ax.grid(linestyle="--", alpha=0.3)
     plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"{ylabel.replace(' ', '_')}_extrusion_time.png", dpi=300)
+    plt.savefig(PLOTS_FOLDER / f"{ylabel.replace(' ', '_')}_extrusion_bar.png", dpi=300)
     plt.show()
 
 
-# ----------------------------
-# generate plots
-# ----------------------------
-time_series_plot(extractor=extract_peak_diameter, ylabel="Peak Diameter (nm)")
-time_series_plot(extractor=extract_peak_width, ylabel="Peak Width σ (nm)")
+# Usage
+time_series_bar_plot(extractor=extract_peak_diameter, ylabel="Peak Diameter (nm)")
+time_series_bar_plot(extractor=extract_peak_width, ylabel="Peak Width σ (nm)")
