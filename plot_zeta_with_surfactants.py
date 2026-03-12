@@ -125,10 +125,34 @@ def grouped_stats(df, group_cols):
 # GENERIC ERRORBAR PLOT
 # ==========================================================
 
+def build_style_maps(df):
+
+    surfactants = sorted(df["surfactant"].unique())
+    lipids = sorted(df["lipid_label"].unique())
+
+    # Colours per surfactant
+    cmap = cmc.hawaii.resampled(len(surfactants))
+    surfactant_colors = {
+        s: mcolors.to_hex(cmap(i))
+        for i, s in enumerate(surfactants)
+    }
+
+    # Marker/linestyle per lipid
+    markers = ['o', 's', 'D', '^']
+    linestyles = ['-', '--', '-.', ':']
+
+    lipid_styles = {
+        l: (markers[i % len(markers)], linestyles[i % len(linestyles)])
+        for i, l in enumerate(lipids)
+    }
+
+    return surfactant_colors, lipid_styles
+
+
 def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 
     unique_groups = stats[group_cols].drop_duplicates()
-    markers, linestyles = setup_plot_style(len(unique_groups))
+    surfactant_colours, lipid_styles = build_style_maps(stats)
     plt.figure(figsize=(10, 6))
 
     for _, row in unique_groups.iterrows():
@@ -139,8 +163,12 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 
         sub = stats[mask].sort_values(x)
 
-        ls = next(linestyles)
-        mk = next(markers)
+        surf = row["surfactant"]
+        lipid = row["lipid_label"]
+        
+        colour = surfactant_colours[surf]
+        mk, ls = lipid_styles[lipid]
+
         label = " | ".join(str(row[col]) for col in group_cols)
 
         plt.errorbar(
@@ -149,6 +177,7 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
             yerr=sub["std"],
             marker=mk,
             linestyle=ls,
+            color=colour,
             markeredgecolor="black",
             markeredgewidth=0.5,
             capsize=4,
