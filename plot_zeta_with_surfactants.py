@@ -213,12 +213,12 @@ def remove_single_concentration_groups(df):
 
 def plot_zeta_vs_concentration(df):
 
-    allowed_ratios = {
+    allowed_lipids = {
         "DMPC:DMPG",
         "POPC"
     }
 
-    df = df[df["lipid_label"].isin(allowed_ratios)]
+    df = df[df["lipid_label"].isin(allowed_lipids)]
 
     # Separate baseline (no surfactant)
     df_none = df[df["surfactant"] == "NONE"]
@@ -253,14 +253,21 @@ def plot_zeta_vs_concentration(df):
     )
 
 
-
 def plot_zeta_vs_fraction(df, fixed_conc=100):
-    df_fixed = df[np.isclose(df["conc_microM"], fixed_conc) | np.isclose(df["conc_microM"], 0)]
-    stats = grouped_stats(df_fixed, ["surfactant", "charged_fraction"])
+
+    df = df[df["lipid_label"].isin({"DMPC:DMPG"})]
+
+    df_fixed = df[
+        np.isclose(df["conc_microM"], fixed_conc) |
+        np.isclose(df["conc_microM"], 0)
+    ]
+
+    stats = grouped_stats(df_fixed, ["surfactant", "lipid_label", "charged_fraction"])
+
     plot_errorbars(
         stats,
         x="charged_fraction",
-        group_cols=["surfactant"],
+        group_cols=["surfactant", "lipid_label"],
         title=f"Zeta vs charged fraction ({fixed_conc} µM)",
         xlabel="Charged lipid fraction",
         ylabel="Zeta potential (mV)",
