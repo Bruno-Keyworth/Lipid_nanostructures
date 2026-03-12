@@ -255,7 +255,10 @@ def plot_zeta_vs_concentration(df):
 
 def plot_zeta_vs_fraction(df, fixed_conc=100):
 
-    df = df[df["lipid_label"].isin({"DMPC:DMPG"})]
+    df = df[df["lipid_label"].isin({"DMPC:DMPG", "DMPC"})].copy()
+
+    # Treat pure DMPC as part of the DMPC:DMPG dataset
+    df.loc[df["lipid_label"] == "DMPC", "lipid_label"] = "DMPC:DMPG"
 
     df_fixed = df[
         np.isclose(df["conc_microM"], fixed_conc) |
