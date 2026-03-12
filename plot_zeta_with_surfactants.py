@@ -167,7 +167,16 @@ def plot_errorbars(stats, x, group_cols, title, xlabel, ylabel, save_name):
 # ==========================================================
 
 def plot_zeta_vs_concentration(df):
-    stats = grouped_stats(df, ["surfactant", "ratio_label", "conc_microM"])
+
+    allowed_ratios = {
+        "7:3 DMPC:DMPG",
+        "10:0 POPC:POPG"
+    }
+
+    df_filtered = df[df["ratio_label"].isin(allowed_ratios)]
+
+    stats = grouped_stats(df_filtered, ["surfactant", "ratio_label", "conc_microM"])
+
     plot_errorbars(
         stats,
         x="conc_microM",
@@ -177,6 +186,7 @@ def plot_zeta_vs_concentration(df):
         ylabel="Zeta potential (mV)",
         save_name="surfactant_ZETA_vs_concentration.png"
     )
+
 
 
 def plot_zeta_vs_fraction(df, fixed_conc=100):
