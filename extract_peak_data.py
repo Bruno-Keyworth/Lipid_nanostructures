@@ -12,6 +12,7 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from get_filepaths import DATA_FOLDER
+from read_zetasizer_data import read_zetasizer_data, base_sample_name
 from read_sample_name import read_sample_name
 
 
@@ -25,13 +26,6 @@ def parse_timestamp(ts):
             return datetime.strptime(ts, "%d/%m/%Y %H:%M:%S")
         except Exception:
             return None
-
-
-def base_sample_name(name):
-    parts = str(name).split()
-    if parts and parts[-1].isdigit():
-        parts = parts[:-1]
-    return " ".join(parts)
 
 def _output_file(input_file, temp):
     
@@ -169,9 +163,16 @@ def process_folder(folder):
 
         average_measurements(file)
 
-        print(f"Processed {file.name}")
+        #print(f"Processed {file.name}")
 
+if __name__ == '__main__':
+    
+    read_zetasizer_data("POPC_POPG_fraction_sizes.txt", "POPC-POPG")
+    read_zetasizer_data("POPC_POPG_zetas.txt", "POPC-POPG")
+    read_zetasizer_data("POPC_temp_extrusion_size.txt", "POPC")
+    read_zetasizer_data("surfactant_sizes.txt", "surfactants")
+    read_zetasizer_data("surfactant_zetas.txt", "surfactants")
 
-process_folder("POPC")
-process_folder("POPC-POPG")
-process_folder("surfactants")
+    process_folder("POPC")
+    process_folder("POPC-POPG")
+    process_folder("surfactants")

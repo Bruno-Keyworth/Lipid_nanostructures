@@ -39,7 +39,7 @@ def base_sample_name(name):
         parts = parts[:-1]
     return " ".join(parts)
 
-def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
+def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
 
     df = pd.read_csv(
         DATA_FOLDER / csv_path,
@@ -143,10 +143,3 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
 
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-
-# Example usage:
-process_dls_csv("POPC_POPG_fraction_sizes.txt", "POPC-POPG")
-process_dls_csv("POPC_POPG_zetas.txt", "POPC-POPG")
-process_dls_csv("POPC_temp_extrusion_size.txt", "POPC")
-process_dls_csv("surfactant_sizes.txt", "surfactants")
-process_dls_csv("surfactant_zetas.txt", "surfactants")
