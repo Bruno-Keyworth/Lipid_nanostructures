@@ -94,11 +94,11 @@ def extract_dominant_peaks(df):
     )
 
     peaks_df["peak_nm"] = peaks_df["peaks"].apply(
-        lambda p: p.get("mean_nm", np.nan) if isinstance(p, dict) else np.nan
+        lambda p: p.get("peak_position_nm", np.nan) if isinstance(p, dict) else np.nan
     )
 
     peaks_df["sigma_nm"] = peaks_df["peaks"].apply(
-        lambda p: p.get("size_peak_nm", np.nan) if isinstance(p, dict) else np.nan
+        lambda p: p.get("peak_width_nm", np.nan) if isinstance(p, dict) else np.nan
     )
 
     idx = peaks_df.groupby(peaks_df.index)["area_percent"].idxmax()
@@ -144,19 +144,19 @@ def plot_peak_vs_concentration(df, charged_fraction_filter=0.3):
 
         ax[0].errorbar(
             sub["conc_microM"], sub["mean_peak"],
-            yerr=sub["std_peak"], marker="o",
+            yerr=0, marker="o",
             color=colors[i], label=surf
         )
 
         ax[1].errorbar(
             sub["conc_microM"], sub["mean_sigma"],
-            yerr=sub["std_sigma"], marker="o",
+            yerr=0, marker="o",
             color=colors[i], label=surf
         )
 
     for axes in ax:
         axes.set_xlabel("Surfactant concentration (µM)")
-        axes.set_xscale("log")
+        #axes.set_xscale("log")
         axes.set_title("7 DMPC : 3 DMPG")
 
         handles, labels = axes.get_legend_handles_labels()

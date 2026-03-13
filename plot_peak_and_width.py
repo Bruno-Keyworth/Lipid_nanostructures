@@ -44,8 +44,8 @@ def load_measurements(folder="POPC"):
             # pick peak with largest area
             if entry.get("peaks"):
                 peak = max(entry["peaks"], key=lambda x: float(x.get("area_percent") or 0))
-                entry["peak_size_nm"] = float(peak.get("mean_nm") or 0)
-                entry["peak_sigma_nm"] = float(peak.get("size_peak_nm") or 0)
+                entry["peak_size_nm"] = float(peak.get("peak_position_nm") or 0)
+                entry["peak_sigma_nm"] = float(peak.get("peak_width_nm") or 0)
 
             entries.append(entry)
 

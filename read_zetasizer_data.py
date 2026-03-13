@@ -80,25 +80,25 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                 intensities = _parse_array(row.get("Intensities"))
                 entry.update({
                     "type": "size",
-                    "sizes_nm": sizes.tolist(),
-                    "intensities_percent": intensities.tolist(),
                     "peaks": [
                         {
-                            "mean_nm": row.get("Pk 1 Mean Int"),
+                            "peak_position_nm": row.get("Pk 1 Mean Int"),
                             "area_percent": row.get("Pk 1 Area Int"),
-                            "size_peak_nm": row.get("Size Peak")
+                            "peak_width_nm": row.get("Size Peak")
                         },
                         {
-                            "mean_nm": row.get("Pk 2 Mean Int"),
+                            "peak_position_nm": row.get("Pk 2 Mean Int"),
                             "area_percent": row.get("Pk 2 Area Int"),
-                            "size_peak_nm": row.get("Size Peak.1")
+                            "peak_width_nm": row.get("Size Peak.1")
                         },
                         {
-                            "mean_nm": row.get("Pk 3 Mean Int"),
+                            "peak_position_nm": row.get("Pk 3 Mean Int"),
                             "area_percent": row.get("Pk 3 Area Int"),
-                            "size_peak_nm": row.get("Size Peak.2")
+                            "peak_width_nm": row.get("Size Peak.2")
                         },
                     ],
+                    "sizes_nm": sizes.tolist(),
+                    "intensities_percent": intensities.tolist(),
                     "z_average_nm": row.get("Z-Ave"),
                     "pdi": row.get("PdI")
                 })
@@ -110,7 +110,7 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                     "conductivity_mScm": row.get("Cond")
                 })
             else:
-                # unknown type, skip
+                print(f"Cannot read measurement type: {row['Type'].strip().lower()}")
                 continue
 
             # store remaining metadata
