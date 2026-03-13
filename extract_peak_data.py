@@ -12,6 +12,7 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from get_filepaths import DATA_FOLDER
+from read_sample_name import read_sample_name
 
 
 def parse_timestamp(ts):
@@ -148,14 +149,13 @@ def average_measurements(input_file):
         else:
             average_zeta = None
 
-        results = {
-            "base_sample_name": base,
+        results = read_sample_name(base) | {
             "temperature_C": temp,
             "average_zeta": average_zeta,
             "averaged_peaks": avg_peaks,
             "repeat_zetas": repeat_zetas,
             "repeat_peaks": repeat_peaks,
-        }
+        } 
 
         with open(_output_file(input_file, temp), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
