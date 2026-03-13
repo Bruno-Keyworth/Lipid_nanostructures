@@ -125,19 +125,19 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                 continue
 
             # store remaining metadata
-            entry["metadata"] = {
-                k: row[k]
-                for k in row.index
-                if k not in [
-                    "Sample Name",
-                    "Base Sample Name",
-                    "Measurement Date and Time",
-                    "T",
-                    "Sizes",
-                    "Intensities",
-                    "Type"
-                ]
-            }
+            # entry["metadata"] = {
+            #     k: row[k]
+            #     for k in row.index
+            #     if k not in [
+            #         "Sample Name",
+            #         "Base Sample Name",
+            #         "Measurement Date and Time",
+            #         "T",
+            #         "Sizes",
+            #         "Intensities",
+            #         "Type"
+            #     ]
+            # }
             existing_timestamps.add(timestamp)
             data.append(entry)
 
