@@ -115,7 +115,8 @@ def plot_peak_vs_concentration(df, charged_fraction_filter=0.3):
 
 def plot_peak_vs_fraction(df, fixed_conc=100):
 
-    df = df[np.isclose(df["conc_microM"], fixed_conc)]
+    # Keep fixed concentration plus zero for baseline
+    df_fixed = df[df["conc_microM"].apply(lambda x: np.isclose(x, fixed_conc) or np.isclose(x, 0))]
 
     groups = df["surfactant"].unique()
 

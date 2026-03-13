@@ -40,7 +40,6 @@ def average_peaks_from_file(input_file, output_file):
 
     data = [d for d in data if d.get("type") == "size"]
 
-    # keep latest measurement for identical sample + temperature
     latest = {}
 
     for entry in data:
@@ -68,14 +67,20 @@ def average_peaks_from_file(input_file, output_file):
     for (base, temp), entries in groups.items():
 
         ranked_peaks = [[], [], []]
+        repeat_peaks = []
 
         for entry in entries:
 
-            peaks = [p for p in entry["peaks"] if p["peak_position_nm"] is not None]
+            peaks = [
+                p for p in entry["peaks"]
+                if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
+            ]
+
+            repeat_peaks.append(peaks)
 
             peaks_sorted = sorted(
                 peaks,
-                key=lambda p: p["area_percent"] if p["area_percent"] else 0,
+                key=lambda p: p["area_percent"],
                 reverse=True
             )
 
@@ -85,20 +90,32 @@ def average_peaks_from_file(input_file, output_file):
         avg_peaks = []
 
         for peak_list in ranked_peaks:
+
             if not peak_list:
                 continue
 
+            positions = [p["peak_position_nm"] for p in peak_list]
+            widths = [p["peak_width_nm"] for p in peak_list]
+            areas = [p["area_percent"] for p in peak_list]
+
             avg_peaks.append({
-                "mean_peak_position_nm": float(np.mean([p["peak_position_nm"] for p in peak_list])),
-                "mean_area_percent": float(np.mean([p["area_percent"] for p in peak_list])),
-                "mean_peak_width_nm": float(np.mean([p["peak_width_nm"] for p in peak_list])),
+                "mean_peak_position_nm": float(np.mean(positions)),
+                "uncertainty_peak_position_nm": float(np.std(positions, ddof=1)) if len(positions) > 1 else 0.0,
+
+                "mean_peak_width_nm": float(np.mean(widths)),
+                "uncertainty_peak_width_nm": float(np.std(widths, ddof=1)) if len(widths) > 1 else 0.0,
+
+                "mean_area_percent": float(np.mean(areas)),
+                "uncertainty_area_percent": float(np.std(areas, ddof=1)) if len(areas) > 1 else 0.0,
+
                 "n_measurements": len(peak_list)
             })
 
         results.append({
             "base_sample_name": base,
             "temperature_C": temp,
-            "averaged_peaks": avg_peaks
+            "averaged_peaks": avg_peaks,
+            "repeat_peaks": repeat_peaks
         })
 
     with open(output_file, "w", encoding="utf-8") as f:
@@ -119,6 +136,5 @@ def process_folder(folder):
         print(f"Processed {file.name}")
 
 
-# example
 process_folder("POPC-POPG")
 process_folder("surfactants")
