@@ -64,11 +64,22 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
         # Load existing data if file exists (so size + zeta can merge)
         file_path = out_dir / (_safe_filename(base_name) + ".json")
         data = []
+        data = []
+        existing_timestamps = set()
+        
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                existing_timestamps = {
+                    entry.get("timestamp") for entry in data if entry.get("timestamp") is not None
+                }
 
         for _, row in group.iterrows():
+            timestamp = row.get("Measurement Date and Time")
+
+            # Skip duplicates
+            if timestamp in existing_timestamps:
+                continue
             entry = {
                 "sample_name": row["Sample Name"],
                 "timestamp": row.get("Measurement Date and Time"),
@@ -127,7 +138,7 @@ def process_dls_csv(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                     "Type"
                 ]
             }
-
+            existing_timestamps.add(timestamp)
             data.append(entry)
 
         with open(file_path, "w", encoding="utf-8") as f:
