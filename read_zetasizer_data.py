@@ -9,6 +9,7 @@ import os
 import json
 import pandas as pd
 import numpy as np
+import re
 from pathlib import Path
 from get_filepaths import DATA_FOLDER
 
@@ -34,6 +35,14 @@ def _safe_filename(name):
     )
 
 def base_sample_name(name):
+    # ensure space before mg_ml
+    name = re.sub(r'(?<!\s)(mg_ml)', r' \1', name)
+    
+    # ensure space after surfactant names
+    name = re.sub(r'(C12E6|TX100|DDAC)(?!\s)', r'\1 ', name)
+    
+    # normalise multiple spaces
+    name = re.sub(r'\s+', ' ', name).strip()
     parts = str(name).split()
     if parts and parts[-1].isdigit():
         parts = parts[:-1]
