@@ -141,7 +141,7 @@ def average_measurements(input_file):
                 float(np.std(repeat_zetas, ddof=1)) if len(repeat_zetas) > 1 else 0.0
             ]
         else:
-            average_zeta = None
+            average_zeta = [None, None]
 
         results = read_sample_name(base) | {
             "temperature_C": temp,
