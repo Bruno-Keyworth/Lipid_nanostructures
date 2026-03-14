@@ -22,6 +22,9 @@ for fp in DATA_DIR.glob("*.json"):
     with open(fp) as f:
         data = json.load(f)
 
+    if not np.isclose(data.get("lipid_conc_mg_ml", np.nan), 0.1):
+        continue
+
     lipid = data["lipid_ratio"]
     surf = data["surfactant_conc_microM"]
 
