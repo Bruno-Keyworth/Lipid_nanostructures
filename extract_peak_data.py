@@ -17,49 +17,66 @@ from read_sample_name import read_sample_name
 
 
 def parse_timestamp(ts):
+
     if ts is None:
         return None
-    try:
-        return datetime.fromisoformat(ts)
-    except Exception:
+
+    formats = [
+        "%d %B %Y %H:%M:%S",   # 05 March 2026 12:28:23
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+    ]
+
+    for fmt in formats:
         try:
-            return datetime.strptime(ts, "%d/%m/%Y %H:%M:%S")
+            return datetime.strptime(ts, fmt)
         except Exception:
-            return None
+            pass
+
+    return None
 
 def _output_file(input_file, temp):
-    
+
     out_folder = input_file.parent / f"{int(temp)}_degrees"
     out_folder.mkdir(exist_ok=True)
-    output_file = out_folder / input_file.name
-    
-    return output_file
 
-def filter_and_group(data):
+    return out_folder / input_file.name
+
+def filter_latest_measurements(data):
     """
-    Filters out measurements that were later repeated and groups by temperature. 
+    Keep only the most recent measurement for each
+    (sample_name, temperature_C) pair.
     """
 
     latest = {}
 
     for entry in data:
+
         key = (entry["sample_name"], entry["temperature_C"])
         ts = parse_timestamp(entry["timestamp"])
 
         if key not in latest:
             latest[key] = entry
-        else:
-            old_ts = parse_timestamp(latest[key]["timestamp"])
-            if ts and old_ts and ts > old_ts:
-                latest[key] = entry
+            continue
 
-    filtered = list(latest.values())
+        old_entry = latest[key]
+        old_ts = parse_timestamp(old_entry["timestamp"])
+
+        if ts is not None and old_ts is not None and ts > old_ts:
+            latest[key] = entry
+
+    return list(latest.values())
+
+def group_by_base_and_temp(data):
 
     groups = defaultdict(list)
 
-    for entry in filtered:
+    for entry in data:
+
         base = base_sample_name(entry["sample_name"])
         key = (base, entry["temperature_C"])
+
         groups[key].append(entry)
 
     return groups
@@ -72,8 +89,11 @@ def average_measurements(input_file):
     size_data = [d for d in data if d.get("type") == "size"]
     zeta_data = [d for d in data if d.get("type") == "zeta"]
 
-    size_groups = filter_and_group(size_data)
-    zeta_groups = filter_and_group(zeta_data)
+    size_data = filter_latest_measurements(size_data)
+    zeta_data = filter_latest_measurements(zeta_data)
+
+    size_groups = group_by_base_and_temp(size_data)
+    zeta_groups = group_by_base_and_temp(zeta_data)
 
     all_keys = set(size_groups) | set(zeta_groups)
 
@@ -130,8 +150,10 @@ def average_measurements(input_file):
             })
 
         zeta_entries = zeta_groups.get((base, temp), [])
+
         repeat_zetas = [
-            entry["zeta_mV"] for entry in zeta_entries
+            entry["zeta_mV"]
+            for entry in zeta_entries
             if entry.get("zeta_mV") is not None
         ]
 
@@ -149,7 +171,7 @@ def average_measurements(input_file):
             "averaged_peaks": avg_peaks,
             "repeat_zetas": repeat_zetas,
             "repeat_peaks": repeat_peaks,
-        } 
+        }
 
         with open(_output_file(input_file, temp), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
@@ -160,13 +182,11 @@ def process_folder(folder):
     folder = DATA_FOLDER / folder
 
     for file in folder.glob("*.json"):
-
         average_measurements(file)
 
-        #print(f"Processed {file.name}")
 
 if __name__ == '__main__':
-    
+
     read_zetasizer_data("POPC_POPG_fraction_sizes.txt", "POPC-POPG")
     read_zetasizer_data("POPC_POPG_zetas.txt", "POPC-POPG")
     read_zetasizer_data("POPC_temp_extrusion_size.txt", "POPC")

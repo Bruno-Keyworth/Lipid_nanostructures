@@ -94,6 +94,9 @@ plots = {
     "p2_pos": "Peak 2 Position (nm)",
     "p2_width": "Peak 2 Width (nm)",
     "p2_area": "Peak 2 Area (%)",
+    "p3_pos": "Peak 3 Position (nm)",
+    "p3_width": "Peak 3 Width (nm)",
+    "p3_area": "Peak 3 Area (%)",
 }
 
 for key, ylabel in plots.items():
