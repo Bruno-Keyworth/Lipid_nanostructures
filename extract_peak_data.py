@@ -81,6 +81,41 @@ def group_by_base_and_temp(data):
 
     return groups
 
+def cluster_peaks(entries, tol_nm=20):
+    """
+    Cluster peaks from repeated measurements based on position proximity.
+    """
+
+    clusters = []
+
+    for entry in entries:
+
+        peaks = [
+            p for p in entry["peaks"]
+            if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
+        ]
+
+        for peak in peaks:
+
+            pos = peak["peak_position_nm"]
+
+            placed = False
+
+            for cluster in clusters:
+
+                mean_pos = np.mean([p["peak_position_nm"] for p in cluster])
+
+                if abs(pos - mean_pos) <= tol_nm:
+                    cluster.append(peak)
+                    placed = True
+                    break
+
+            if not placed:
+                clusters.append([peak])
+
+    return clusters
+
+
 def average_measurements(input_file):
 
     with open(input_file, "r", encoding="utf-8") as f:
@@ -101,38 +136,24 @@ def average_measurements(input_file):
 
         entries = size_groups.get((base, temp), [])
 
-        ranked_peaks = [[], [], []]
-        repeat_peaks = []
-
-        for entry in entries:
-
-            peaks = [
-                p for p in entry["peaks"]
-                if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
-            ]
-
-            repeat_peaks.append(peaks)
-
-            peaks_sorted = sorted(
-                peaks,
-                key=lambda p: p["area_percent"],
-                reverse=True
-            )
-
-            for i in range(min(3, len(peaks_sorted))):
-                ranked_peaks[i].append(peaks_sorted[i])
+        repeat_peaks = [
+        [
+            p for p in entry["peaks"]
+            if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
+        ]
+        for entry in entries
+        ]
+    
+        clusters = cluster_peaks(entries)
 
         avg_peaks = []
 
-        for peak_list in ranked_peaks:
-
-            if not peak_list:
-                continue
-
-            positions = [p["peak_position_nm"] for p in peak_list]
-            widths = [p["peak_width_nm"] for p in peak_list]
-            areas = [p["area_percent"] for p in peak_list]
-
+        for cluster in clusters:
+        
+            positions = [p["peak_position_nm"] for p in cluster]
+            widths = [p["peak_width_nm"] for p in cluster]
+            areas = [p["area_percent"] for p in cluster]
+        
             avg_peaks.append({
                 "peak_position_nm": [
                     float(np.mean(positions)),
@@ -146,8 +167,9 @@ def average_measurements(input_file):
                     float(np.mean(areas)),
                     float(np.std(areas, ddof=1)) if len(areas) > 1 else 0.0
                 ],
-                "n_measurements": len(peak_list)
+                "n_measurements": len(cluster)
             })
+
 
         zeta_entries = zeta_groups.get((base, temp), [])
 
