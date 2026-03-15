@@ -53,7 +53,7 @@ def extract_peak_diameter(entry):
         return None
     peak = max(peaks, key=lambda x: float(x.get("area_percent") or 0))
     try:
-        return float(peak.get("mean_nm") or 0)
+        return float(peak.get("peak_position_nm") or 0)
     except Exception:
         return None
 
@@ -65,7 +65,7 @@ def extract_peak_width(entry):
         return None
     peak = max(peaks, key=lambda x: float(x.get("area_percent") or 0))
     try:
-        return float(peak.get("size_peak_nm") or 0)
+        return float(peak.get("peak_width_nm") or 0)
     except Exception:
         return None
 
@@ -135,8 +135,10 @@ def time_series_bar_plot(extractor, ylabel):
     for idx, t in enumerate(temperatures):
         means, errors = [], []
         day_values = day_values_per_temp.get(t, {})
+        
         for day in all_days:
             values = day_values.get(day, [])
+            
             if values:
                 means.append(np.mean(values))
                 errors.append(np.std(values, ddof=1))
