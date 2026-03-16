@@ -26,6 +26,7 @@ plt.rcParams.update({
 })
 
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
+from extract_peak_data import gather_data
 
 colours = {
     "Control": "black",
@@ -40,93 +41,6 @@ peak_labels = {
     "area": "Peak Area (%)",
 }
 
-def mean_err(entry):
-    if entry and isinstance(entry, list) and len(entry) == 2:
-        return entry[0], entry[1]
-    return np.nan, np.nan
-
-
-def gather_data(folder):
-
-    records = []
-
-    for fp in folder.glob("*.json"):
-        with open(fp) as f:
-            data = json.load(f)
-
-        if not np.isclose(data.get("lipid_conc_mg_ml", np.nan), 0.1):
-            continue
-
-        lipid = data["lipid_ratio"]
-        surf = data["surfactant_conc_microM"]
-
-        DMPC = lipid.get("DMPC", 0)
-        DMPG = lipid.get("DMPG", 0)
-
-        if DMPC == 0 and DMPG == 0:
-            continue
-
-        total = DMPC + DMPG
-        frac_DMPG = DMPG / total if total > 0 else np.nan
-
-        surf_total = surf.get("C12E6", 0) + surf.get("DDAC", 0) + surf.get("TX100", 0)
-
-        peaks = data.get("averaged_peaks", [])
-
-        p1 = peaks[0] if len(peaks) > 0 else {}
-        p2 = peaks[1] if len(peaks) > 1 else {}
-        p3 = peaks[2] if len(peaks) > 2 else {}
-
-        zeta, zeta_err = mean_err(data.get("average_zeta"))
-
-        p1_pos, p1_pos_err = mean_err(p1.get("peak_position_nm"))
-        p1_width, p1_width_err = mean_err(p1.get("peak_width_nm"))
-        p1_area, p1_area_err = mean_err(p1.get("area_percent"))
-
-        p2_pos, p2_pos_err = mean_err(p2.get("peak_position_nm"))
-        p2_width, p2_width_err = mean_err(p2.get("peak_width_nm"))
-        p2_area, p2_area_err = mean_err(p2.get("area_percent"))
-
-        p3_pos, p3_pos_err = mean_err(p3.get("peak_position_nm"))
-        p3_width, p3_width_err = mean_err(p3.get("peak_width_nm"))
-        p3_area, p3_area_err = mean_err(p3.get("area_percent"))
-
-        record = {
-            "fraction_DMPG": frac_DMPG,
-            "surfactant_total": surf_total,
-
-            "zeta": zeta,
-            "zeta_err": zeta_err,
-
-            "p1_pos": p1_pos,
-            "p1_pos_err": p1_pos_err,
-            "p1_width": p1_width,
-            "p1_width_err": p1_width_err,
-            "p1_area": p1_area,
-            "p1_area_err": p1_area_err,
-
-            "p2_pos": p2_pos,
-            "p2_pos_err": p2_pos_err,
-            "p2_width": p2_width,
-            "p2_width_err": p2_width_err,
-            "p2_area": p2_area,
-            "p2_area_err": p2_area_err,
-
-            "p3_pos": p3_pos,
-            "p3_pos_err": p3_pos_err,
-            "p3_width": p3_width,
-            "p3_width_err": p3_width_err,
-            "p3_area": p3_area,
-            "p3_area_err": p3_area_err,
-
-            "C12E6": surf.get("C12E6", 0),
-            "DDAC": surf.get("DDAC", 0),
-            "TX100": surf.get("TX100", 0),
-        }
-
-        records.append(record)
-
-    return pd.DataFrame(records)
 
 def surfactant_condition(row):
 
@@ -142,7 +56,7 @@ def surfactant_condition(row):
 
     return None
 
-def create_concentration_plots(df, ratio=0.3):
+def create_concentration_plots(df, ratio=0.3, zeta=True):
     """
     Peak plots: 3 figures (pos, width, area), each with 3 subplots (one per surfactant).
     Control points appear at 0.1 µM on all subplots.
@@ -215,6 +129,14 @@ def create_concentration_plots(df, ratio=0.3):
     
         fig.savefig(PLOTS_FOLDER / f"{key}_conc_1x3.png", dpi=300)
         plt.show()
+        
+    if zeta:
+        plot_zeta_against_concentration(df, surfactants)
+        
+        
+def plot_zeta_against_concentration(df, surfactants):
+    
+    control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
 
     # ----- Zeta plot (single plot for all surfactants) -----
     fig, ax = plt.subplots()
@@ -239,7 +161,7 @@ def create_concentration_plots(df, ratio=0.3):
     fig.savefig(PLOTS_FOLDER / "zeta_conc.png", dpi=300)
     plt.show()
 
-def create_fraction_plots(df):
+def create_fraction_plots(df, zeta=True):
     """
     Creates:
     - Peak plots (position, width, area) as 2x2 grid (Control + 3 surfactants)
@@ -324,10 +246,13 @@ def create_fraction_plots(df):
     
         fig.savefig(PLOTS_FOLDER / f"{key}_fraction_2x2.png", dpi=300)
         plt.show()
+    if zeta:   
+        plot_zeta_against_fraction(df, conditions)
+        
+def plot_zeta_against_fraction(df, conditions):
 
-    # ----- Zeta plots (absolute + delta relative to control) -----
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
+    
     # Absolute zeta
     for cond in conditions:
         sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
@@ -340,13 +265,13 @@ def create_fraction_plots(df):
             marker="o",
             linestyle="-",
             capsize=3,
-            label=cond,
             color=colours[cond],
+            label=cond  # only needed for legend
         )
-
+    
     # Control reference
     control = df[df["condition"] == "Control"][["fraction_DMPG", "zeta", "zeta_err"]].set_index("fraction_DMPG")
-
+    
     # Control-subtracted zeta
     for cond in conditions[1:]:
         sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
@@ -360,7 +285,7 @@ def create_fraction_plots(df):
             continue
         delta = merged["zeta_surf"] - merged["zeta_ctrl"]
         delta_err = np.sqrt(merged["zeta_err_surf"]**2 + merged["zeta_err_ctrl"]**2)
-
+    
         axes[1].errorbar(
             merged["fraction_DMPG"],
             delta,
@@ -368,35 +293,43 @@ def create_fraction_plots(df):
             marker="o",
             linestyle="-",
             capsize=3,
-            label=cond,
             color=colours[cond],
+            label=cond  # only needed for legend
         )
-
+    
     # Reference line at 0
     axes[1].axhline(0, linestyle="--", linewidth=1, color=colours["Control"])
-
-    for ax in axes:
-        ax.set_xlabel("Fraction DMPG / (DMPC + DMPG)")
-        ax.legend()
-
+    
+    # Axis labels
     axes[0].set_ylabel("Zeta Potential (mV)")
     axes[1].set_ylabel("Zeta Potential - Control (mV)")
-
+    for ax in axes:
+        ax.set_xlabel("DMPG Fraction")
+    
+    # Create common legend without duplicates
+    handles, labels = axes[0].get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))  # deduplicate
+    fig.legend(
+        by_label.values(),
+        by_label.keys(),
+        loc="lower center",
+        ncol=len(by_label),
+        frameon=False,
+        fontsize=12,
+        bbox_to_anchor=(0.5, -0.1)
+    )
+    
     fig.tight_layout()
-    fig.savefig(PLOTS_FOLDER / "zeta_fraction.png", dpi=300)
+    fig.savefig(PLOTS_FOLDER / "zeta_fraction.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 if __name__ == "__main__":
     plt.close('all')
 
     folder = DATA_FOLDER / "surfactants" / "50_degrees"
-
     df = gather_data(folder)
-
     create_fraction_plots(df)
     
-    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
-
-    # df = gather_data(folder)
-    
-    # create_concentration_plots(df)
+    folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    df = gather_data(folder)
+    create_concentration_plots(df)

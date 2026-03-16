@@ -14,6 +14,7 @@ from datetime import datetime
 from get_filepaths import DATA_FOLDER
 from read_zetasizer_data import read_zetasizer_data, base_sample_name
 from read_sample_name import read_sample_name
+import pandas as pd
 
 from sklearn.cluster import DBSCAN
 
@@ -208,6 +209,92 @@ def average_measurements(input_file):
         with open(_output_file(input_file, temp), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
 
+def mean_err(entry):
+    if entry and isinstance(entry, list) and len(entry) == 2:
+        return entry[0], entry[1]
+    return np.nan, np.nan
+
+def gather_data(folder):
+
+    records = []
+
+    for fp in folder.glob("*.json"):
+        with open(fp) as f:
+            data = json.load(f)
+
+        if not np.isclose(data.get("lipid_conc_mg_ml", np.nan), 0.1):
+            continue
+
+        lipid = data["lipid_ratio"]
+        surf = data["surfactant_conc_microM"]
+
+        DMPC = lipid.get("DMPC", 0)
+        DMPG = lipid.get("DMPG", 0)
+
+        if DMPC == 0 and DMPG == 0:
+            continue
+
+        total = DMPC + DMPG
+        frac_DMPG = DMPG / total if total > 0 else np.nan
+
+        surf_total = surf.get("C12E6", 0) + surf.get("DDAC", 0) + surf.get("TX100", 0)
+
+        peaks = data.get("averaged_peaks", [])
+
+        p1 = peaks[0] if len(peaks) > 0 else {}
+        p2 = peaks[1] if len(peaks) > 1 else {}
+        p3 = peaks[2] if len(peaks) > 2 else {}
+
+        zeta, zeta_err = mean_err(data.get("average_zeta"))
+
+        p1_pos, p1_pos_err = mean_err(p1.get("peak_position_nm"))
+        p1_width, p1_width_err = mean_err(p1.get("peak_width_nm"))
+        p1_area, p1_area_err = mean_err(p1.get("area_percent"))
+
+        p2_pos, p2_pos_err = mean_err(p2.get("peak_position_nm"))
+        p2_width, p2_width_err = mean_err(p2.get("peak_width_nm"))
+        p2_area, p2_area_err = mean_err(p2.get("area_percent"))
+
+        p3_pos, p3_pos_err = mean_err(p3.get("peak_position_nm"))
+        p3_width, p3_width_err = mean_err(p3.get("peak_width_nm"))
+        p3_area, p3_area_err = mean_err(p3.get("area_percent"))
+
+        record = {
+            "fraction_DMPG": frac_DMPG,
+            "surfactant_total": surf_total,
+
+            "zeta": zeta,
+            "zeta_err": zeta_err,
+
+            "p1_pos": p1_pos,
+            "p1_pos_err": p1_pos_err,
+            "p1_width": p1_width,
+            "p1_width_err": p1_width_err,
+            "p1_area": p1_area,
+            "p1_area_err": p1_area_err,
+
+            "p2_pos": p2_pos,
+            "p2_pos_err": p2_pos_err,
+            "p2_width": p2_width,
+            "p2_width_err": p2_width_err,
+            "p2_area": p2_area,
+            "p2_area_err": p2_area_err,
+
+            "p3_pos": p3_pos,
+            "p3_pos_err": p3_pos_err,
+            "p3_width": p3_width,
+            "p3_width_err": p3_width_err,
+            "p3_area": p3_area,
+            "p3_area_err": p3_area_err,
+
+            "C12E6": surf.get("C12E6", 0),
+            "DDAC": surf.get("DDAC", 0),
+            "TX100": surf.get("TX100", 0),
+        }
+
+        records.append(record)
+
+    return pd.DataFrame(records)
 
 def process_folder(folder):
 
