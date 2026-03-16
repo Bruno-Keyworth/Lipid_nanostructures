@@ -125,7 +125,11 @@ def surfactant_condition(row):
     return None
 
 def create_concentration_plots(df, ratio=0.3):
-
+    """
+    Creates:
+    - Peak plots (position, width, area) as 2x2 grid (Control + 3 surfactants)
+    - Zeta potential plot (single plot for all surfactants)
+    """
     df = df[np.isclose(df["fraction_DMPG"], ratio)]
 
     peak_plots = {
@@ -136,32 +140,33 @@ def create_concentration_plots(df, ratio=0.3):
 
     surfactants = ["C12E6", "DDAC", "TX100"]
 
-    control = df[
-        (df["C12E6"] == 0) &
-        (df["DDAC"] == 0) &
-        (df["TX100"] == 0)
-    ]
+    # Identify control rows
+    control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
 
-    # ----- Peak plots (one figure per surfactant) -----
-    for surf in surfactants:
+    # ----- Peak plots (2x2 grid for control + each surfactant) -----
+    conditions = ["Control"] + surfactants
+    for key, ylabel in peak_plots.items():
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        axes = axes.flatten()
 
-        sub = pd.concat([control, df[df[surf] > 0]], ignore_index=True)
-        sub = sub.sort_values(surf)
+        for i, cond in enumerate(conditions):
+            if cond == "Control":
+                sub = control
+                x = np.zeros(len(sub))  # Control points at 0 µM
+            else:
+                sub = pd.concat([control, df[df[cond] > 0]], ignore_index=True)
+                sub = sub.sort_values(cond)
+                x = sub[cond]
 
-        if sub.empty:
-            continue
+            if sub.empty:
+                continue
 
-        for key, ylabel in peak_plots.items():
-
-            fig, ax = plt.subplots()
-
+            ax = axes[i]
             for peak in [1, 2, 3]:
-
                 val = f"p{peak}_{key}"
                 err = f"{val}_err"
-
                 ax.errorbar(
-                    sub[surf],
+                    x,
                     sub[val],
                     yerr=sub[err],
                     marker="o",
@@ -170,27 +175,25 @@ def create_concentration_plots(df, ratio=0.3):
                     label=f"Peak {peak}",
                 )
 
+            ax.set_title(cond)
             ax.set_xlabel("Surfactant concentration (µM)")
-            ax.set_xscale("log")
+            ax.set_xscale("log" if cond != "Control" else "linear")
             ax.set_ylabel(ylabel)
             ax.legend()
 
-            fig.tight_layout()
-            fig.savefig(
-                PLOTS_FOLDER / f"{surf}_{key}_conc.png",
-                dpi=300
-            )
+        # Remove unused subplots if less than 4
+        for j in range(len(conditions), len(axes)):
+            fig.delaxes(axes[j])
 
-            plt.show()
+        fig.tight_layout()
+        fig.savefig(PLOTS_FOLDER / f"{key}_conc_2x2.png", dpi=300)
+        plt.show()
 
-    # ----- Zeta plot (all surfactants together) -----
+    # ----- Zeta plot (single plot for all surfactants) -----
     fig, ax = plt.subplots()
-
     for surf in surfactants:
-
         sub = pd.concat([control, df[df[surf] > 0]], ignore_index=True)
         sub = sub.sort_values(surf)
-
         if sub.empty:
             continue
 
@@ -212,40 +215,45 @@ def create_concentration_plots(df, ratio=0.3):
 
     fig.tight_layout()
     fig.savefig(PLOTS_FOLDER / "zeta_conc.png", dpi=300)
-
     plt.show()
 
-def create_fraction_plot(df):
-
+def create_fraction_plots(df):
+    """
+    Creates:
+    - Peak plots (position, width, area) as 2x2 grid (Control + 3 surfactants)
+    - Zeta potential plots: absolute and delta vs control
+    """
+    # Add the condition column based on surfactant concentrations
     df["condition"] = df.apply(surfactant_condition, axis=1)
-    df = df.dropna(subset=["condition"])
+    df = df.dropna(subset=["condition"])  # remove any rows without a condition
 
+    # Now you can safely use df["condition"]
     conditions = ["Control", "C12E6", "DDAC", "TX100"]
 
+    ...
+    
+    # Peak properties
     peak_plots = {
         "pos": "Peak Position (nm)",
         "width": "Peak Width (nm)",
         "area": "Peak Area (%)",
     }
 
-    # ----- Peak plots (one figure per surfactant condition) -----
-    for cond in conditions:
+    # ----- Peak plots -----
+    for key, ylabel in peak_plots.items():
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        axes = axes.flatten()  # easier indexing
 
-        sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
+        for i, cond in enumerate(conditions):
+            sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
+            if sub.empty:
+                continue
 
-        if len(sub) == 0:
-            continue
-
-        for key, ylabel in peak_plots.items():
-
-            plt.figure()
-
+            ax = axes[i]
             for peak in [1, 2, 3]:
-
                 val = f"p{peak}_{key}"
                 err = f"{val}_err"
-
-                plt.errorbar(
+                ax.errorbar(
                     sub["fraction_DMPG"],
                     sub[val],
                     yerr=sub[err],
@@ -254,79 +262,78 @@ def create_fraction_plot(df):
                     capsize=3,
                     label=f"Peak {peak}",
                 )
+            ax.set_title(cond)
+            ax.set_xlabel("DMPG Fraction")
+            ax.set_ylabel(ylabel)
+            ax.legend()
 
-            plt.xlabel("DMPG Fraction")
-            plt.ylabel(ylabel)
-            plt.title(cond)
-            plt.legend()
-            plt.tight_layout()
+        # Remove empty subplots if less than 4 conditions
+        for j in range(len(conditions), len(axes)):
+            fig.delaxes(axes[j])
 
-            safe_cond = cond.replace(" ", "_").replace("µ", "u")
+        fig.tight_layout()
+        fig.savefig(PLOTS_FOLDER / f"{key}_fraction_2x2.png", dpi=300)
+        plt.show()
 
-            plt.savefig(
-                PLOTS_FOLDER / f"{safe_cond}_{key}_fraction.png",
-                dpi=300
-            )
-
-            plt.show()
-
+    # ----- Zeta plots (absolute + delta relative to control) -----
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    
-    # ----- absolute zeta -----
+
+    # Absolute zeta
     for cond in conditions:
         sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
         if sub.empty:
             continue
-    
         axes[0].errorbar(
-            sub["fraction_DMPG"], sub["zeta"], yerr=sub["zeta_err"],
-            marker="o", linestyle="-", capsize=3,
-            label=cond, color=colours[cond]
+            sub["fraction_DMPG"],
+            sub["zeta"],
+            yerr=sub["zeta_err"],
+            marker="o",
+            linestyle="-",
+            capsize=3,
+            label=cond,
+            color=colours[cond],
         )
-    
-    # ----- control reference -----
-    control = (
-        df[df["condition"] == "Control"]
-        [["fraction_DMPG", "zeta", "zeta_err"]]
-        .set_index("fraction_DMPG")
-    )
-    
-    # ----- control-subtracted zeta -----
+
+    # Control reference
+    control = df[df["condition"] == "Control"][["fraction_DMPG", "zeta", "zeta_err"]].set_index("fraction_DMPG")
+
+    # Control-subtracted zeta
     for cond in conditions[1:]:
-    
         sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
-    
         merged = sub.merge(
             control,
             left_on="fraction_DMPG",
             right_index=True,
             suffixes=("_surf", "_ctrl"),
         )
-    
         if merged.empty:
             continue
-    
         delta = merged["zeta_surf"] - merged["zeta_ctrl"]
         delta_err = np.sqrt(merged["zeta_err_surf"]**2 + merged["zeta_err_ctrl"]**2)
-    
+
         axes[1].errorbar(
-            merged["fraction_DMPG"], delta, yerr=delta_err,
-            marker="o", linestyle="-", capsize=3,
-            label=cond, color=colours[cond]
+            merged["fraction_DMPG"],
+            delta,
+            yerr=delta_err,
+            marker="o",
+            linestyle="-",
+            capsize=3,
+            label=cond,
+            color=colours[cond],
         )
-    
-    # control reference line
+
+    # Reference line at 0
     axes[1].axhline(0, linestyle="--", linewidth=1, color=colours["Control"])
-    
+
     for ax in axes:
         ax.set_xlabel("Fraction DMPG / (DMPC + DMPG)")
         ax.legend()
-    
+
     axes[0].set_ylabel("Zeta Potential (mV)")
     axes[1].set_ylabel("Δ Zeta Potential (mV) relative to control")
-    
-    plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / "zeta_fraction.png", dpi=300)
+
+    fig.tight_layout()
+    fig.savefig(PLOTS_FOLDER / "zeta_fraction.png", dpi=300)
     plt.show()
 
 if __name__ == "__main__":
@@ -336,7 +343,7 @@ if __name__ == "__main__":
 
     df = gather_data(folder)
 
-    create_fraction_plot(df)
+    create_fraction_plots(df)
     
     folder = DATA_FOLDER / "surfactants" / "25_degrees"
 
