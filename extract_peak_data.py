@@ -81,7 +81,7 @@ def group_by_base_and_temp(data):
 
     return groups
 
-def cluster_peaks(entries, tol_nm=20):
+def cluster_peaks(entries, tol_nm=20, max_pos_nm=3000):
     """
     Cluster peaks from repeated measurements based on position proximity.
     """
@@ -92,13 +92,16 @@ def cluster_peaks(entries, tol_nm=20):
 
         peaks = [
             p for p in entry["peaks"]
-            if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
+            if (
+                p["peak_position_nm"] is not None
+                and p["peak_position_nm"] <= max_pos_nm
+                and (p["area_percent"] or 0) > 0
+            )
         ]
 
         for peak in peaks:
 
             pos = peak["peak_position_nm"]
-
             placed = False
 
             for cluster in clusters:
