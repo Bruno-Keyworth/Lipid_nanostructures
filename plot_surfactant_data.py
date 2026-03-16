@@ -56,84 +56,138 @@ def surfactant_condition(row):
 
     return None
 
-def create_concentration_plots(df, ratio=0.3, zeta=True):
+def plot_peak_bars(ax, rows, key, width=0.25):
     """
-    Peak plots: 3 figures (pos, width, area), each with 3 subplots (one per surfactant).
-    Control points appear at 0.1 µM on all subplots.
-    Zeta plot: single figure for all surfactants
+    Plot bars for peaks on a given axis. Positions are integer indices; x-axis labels are separate.
     """
-    df = df[np.isclose(df["fraction_DMPG"], ratio)]
+    for k, (_, row) in enumerate(rows.iterrows()):
+        peaks = [
+            {"value": row[f"p{i}_{key}"], "err": row[f"p{i}_{key}_err"], "area": row[f"p{i}_area"]}
+            for i in [1, 2, 3]
+        ]
+        peaks = sorted(peaks, key=lambda p: p["area"], reverse=True)
+        for j, p in enumerate(peaks):
+            x = k + (j - 1) * width  # keep original indexing
+            colour = cmap(norm(p["area"]))
+            ax.bar(
+                x,
+                p["value"],
+                width=width,
+                yerr=p["err"],
+                capsize=3,
+                color=colour,
+                edgecolor="black",
+            )
+            
+def rows_label_values(rows):
+    # For concentration plots, take the nonzero surfactant value + zeros for control
     surfactants = ["C12E6", "DDAC", "TX100"]
-    peak_cols = ["pos", "width", "area"]
+    if all(col in rows.columns for col in surfactants):
+        # concentration plot: find which surfactant is nonzero in each row
+        vals = []
+        for _, row in rows.iterrows():
+            nz = [row[surf] for surf in surfactants if row[surf] > 0]
+            vals.append(nz[0] if nz else 0)
+        return vals
+    # otherwise, assume fraction plot and take "fraction_DMPG"
+    if "fraction_DMPG" in rows.columns:
+        return rows["fraction_DMPG"].values
+    return np.arange(len(rows))
 
-    # Identify control rows
-    control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
+def create_peak_figure(df_rows, x_values, keys, titles, xlabel_func, fig_shape=(1, 3), filename_prefix="plot"):
+    """
+    General function to create peak plots.
     
-    for key in peak_cols:
-    
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
-    
-        for i, surf in enumerate(surfactants):
-    
-            ax = axes[i]
-            sub = df[df[surf] > 0].sort_values(surf)
-    
-            if sub.empty:
+    Parameters
+    ----------
+    df_rows : list of pd.DataFrame
+        One DataFrame per subplot/condition.
+    x_values : list of arrays
+        X positions for each subplot.
+    keys : list of str
+        'pos', 'width', 'area'.
+    titles : list of str
+        Titles for each subplot.
+    xlabel_func : callable
+        Function to generate x-axis labels given the data.
+    fig_shape : tuple
+        Figure grid shape.
+    filename_prefix : str
+        Prefix for saved figure.
+    """
+    for key in keys:
+        fig, axes = plt.subplots(*fig_shape, figsize=(6*fig_shape[1], 4*fig_shape[0]), constrained_layout=True)
+        axes = np.array(axes).flatten()
+        
+        for ax, rows, title in zip(axes, df_rows, titles):
+            if rows.empty:
                 continue
-    
-            rows = pd.concat([control, sub], ignore_index=True)
-            conc = np.concatenate([np.full(len(control), 0), sub[surf].values])
-    
-            width = 0.25
-    
-            for k, (_, row) in enumerate(rows.iterrows()):
-    
-                peaks = []
-                for peak in [1, 2, 3]:
-                    peaks.append({
-                        "value": row[f"p{peak}_{key}"],
-                        "err": row[f"p{peak}_{key}_err"],
-                        "area": row[f"p{peak}_area"]
-                    })
-    
-                # Order by decreasing area
-                peaks = sorted(peaks, key=lambda p: p["area"], reverse=True)
-    
-                for j, p in enumerate(peaks):
-    
-                    x = k + (j - 1) * width
-                    colour = cmap(norm(p["area"]))
-    
-                    ax.bar(
-                        x,
-                        p["value"],
-                        width=width,
-                        yerr=p["err"],
-                        capsize=3,
-                        color=colour,
-                        edgecolor="black",
-                    )
-    
-            ax.set_xticks(range(len(conc)))
-            ax.set_xticklabels([f"{c:g}" for c in conc])
-            ax.set_xlabel(f"{surf} concentration (µM)")
+            plot_peak_bars(ax, rows, key)
+            ax.set_xticks(range(len(rows)))  # integer indices
+            ax.set_xticklabels([xlabel_func(val) for val in rows_label_values(rows)])
+            ax.set_title(title)
             ax.set_ylabel(peak_labels[key])
-            ax.set_title(surf)
-    
-        # Add shared colourbar
+        
+        # remove unused axes
+        for ax in axes[len(df_rows):]:
+            fig.delaxes(ax)
+        
         sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
-    
         cbar = fig.colorbar(sm, ax=axes, pad=0.02)
         cbar.set_label("Peak Area (%)")
-    
-        fig.savefig(PLOTS_FOLDER / f"{key}_conc_1x3.png", dpi=300)
-        plt.show()
         
+        fig.savefig(PLOTS_FOLDER / f"{key}_{filename_prefix}.png", dpi=300)
+        plt.show()
+
+# --- Refactored concentration plot ---
+def create_concentration_plots(df, ratio=0.3, zeta=True):
+    df = df[np.isclose(df["fraction_DMPG"], ratio)]
+    surfactants = ["C12E6", "DDAC", "TX100"]
+    control = df[(df[surfactants] == 0).all(axis=1)]
+    
+    df_rows = []
+    x_vals = []
+    titles = []
+    for surf in surfactants:
+        sub = df[df[surf] > 0].sort_values(surf)
+        if sub.empty:
+            df_rows.append(pd.DataFrame())
+            x_vals.append([])
+            titles.append(surf)
+            continue
+        rows = pd.concat([control, sub], ignore_index=True)
+        df_rows.append(rows)
+        x_vals.append(np.concatenate([np.full(len(control), 0), sub[surf].values]))
+        titles.append(surf)
+    
+    create_peak_figure(df_rows, x_vals, ["pos", "width", "area"], titles,
+                       xlabel_func=lambda c: f"{c:g}", fig_shape=(1, 3), filename_prefix="conc_1x3")
+    
     if zeta:
         plot_zeta_against_concentration(df, surfactants)
-        
-        
+
+# --- Refactored fraction plot ---
+def create_fraction_plots(df, zeta=True):
+    df["condition"] = df.apply(surfactant_condition, axis=1)
+    df = df.dropna(subset=["condition"])
+    conditions = ["Control", "C12E6", "DDAC", "TX100"]
+    
+    df_rows = []
+    x_vals = []
+    titles = []
+    for cond in conditions:
+        sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
+        df_rows.append(sub)
+        x_vals.append(sub["fraction_DMPG"].values if not sub.empty else [])
+        titles.append(cond)
+    
+    create_peak_figure(df_rows, x_vals, ["pos", "width", "area"], titles,
+                       xlabel_func=lambda x: f"{x:.2f}", fig_shape=(2, 2), filename_prefix="fraction_2x2")
+    
+    if zeta:
+        plot_zeta_against_fraction(df, conditions)
+
 def plot_zeta_against_concentration(df, surfactants):
     
     control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
@@ -161,94 +215,6 @@ def plot_zeta_against_concentration(df, surfactants):
     fig.savefig(PLOTS_FOLDER / "zeta_conc.png", dpi=300)
     plt.show()
 
-def create_fraction_plots(df, zeta=True):
-    """
-    Creates:
-    - Peak plots (position, width, area) as 2x2 grid (Control + 3 surfactants)
-    - Zeta potential plots: absolute and delta vs control
-    """
-    # Add the condition column based on surfactant concentrations
-    df["condition"] = df.apply(surfactant_condition, axis=1)
-    df = df.dropna(subset=["condition"])  # remove any rows without a condition
-
-    # Now you can safely use df["condition"]
-    conditions = ["Control", "C12E6", "DDAC", "TX100"]
-
-    ...
-    
-    # Peak properties
-    peak_plots = {
-        "pos": "Peak Position (nm)",
-        "width": "Peak Width (nm)",
-        "area": "Peak Area (%)",
-    }
-
-    # ----- Peak plots -----
-    for key in peak_plots.keys():
-    
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
-        axes = axes.flatten()
-    
-        for i, cond in enumerate(conditions):
-    
-            sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
-            if sub.empty:
-                continue
-    
-            ax = axes[i]
-    
-            width = 0.25
-    
-            for k, (_, row) in enumerate(sub.iterrows()):
-    
-                peaks = []
-                for peak in [1, 2, 3]:
-                    peaks.append({
-                        "value": row[f"p{peak}_{key}"],
-                        "err": row[f"p{peak}_{key}_err"],
-                        "area": row[f"p{peak}_area"],
-                    })
-    
-                # order bars by decreasing area
-                peaks = sorted(peaks, key=lambda p: p["area"], reverse=True)
-    
-                for j, p in enumerate(peaks):
-    
-                    x = k + (j - 1) * width
-                    colour = cmap(norm(p["area"]))
-    
-                    ax.bar(
-                        x,
-                        p["value"],
-                        width=width,
-                        yerr=p["err"],
-                        capsize=3,
-                        color=colour,
-                        edgecolor="black",
-                    )
-    
-            ax.set_xticks(range(len(sub)))
-            ax.set_xticklabels([f"{x:.2f}" for x in sub["fraction_DMPG"]])
-    
-            ax.set_title(cond)
-            ax.set_xlabel("DMPG Fraction")
-            ax.set_ylabel(peak_labels[key])
-
-        # remove unused subplot if fewer than 4 conditions
-        for j in range(len(conditions), len(axes)):
-            fig.delaxes(axes[j])
-    
-        # shared colourbar
-        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-        cbar.set_label("Peak Area (%)")
-    
-        fig.savefig(PLOTS_FOLDER / f"{key}_fraction_2x2.png", dpi=300)
-        plt.show()
-    if zeta:   
-        plot_zeta_against_fraction(df, conditions)
-        
 def plot_zeta_against_fraction(df, conditions):
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
