@@ -12,6 +12,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+cmap = mpl.cm.viridis
+norm = mpl.colors.Normalize(vmin=0, vmax=100)
+plt.rcParams.update({
+    "font.size": 14,          # base size
+    "axes.titlesize": 16,     # subplot titles
+    "axes.labelsize": 14,     # x and y labels
+    "xtick.labelsize": 12,    # x tick labels
+    "ytick.labelsize": 12,    # y tick labels
+    "legend.fontsize": 12,
+    "figure.titlesize": 18,
+})
 
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
@@ -20,6 +32,12 @@ colours = {
     "C12E6": "tab:blue",
     "DDAC": "tab:red",
     "TX100": "tab:green",
+}
+
+peak_labels = {
+    "pos": "Mean Peak Position (nm)",
+    "width": "Peak Width (nm)",
+    "area": "Peak Area (%)",
 }
 
 def mean_err(entry):
@@ -126,91 +144,95 @@ def surfactant_condition(row):
 
 def create_concentration_plots(df, ratio=0.3):
     """
-    Creates:
-    - Peak plots (position, width, area) as 2x2 grid (Control + 3 surfactants)
-    - Zeta potential plot (single plot for all surfactants)
+    Peak plots: 3 figures (pos, width, area), each with 3 subplots (one per surfactant).
+    Control points appear at 0.1 µM on all subplots.
+    Zeta plot: single figure for all surfactants
     """
     df = df[np.isclose(df["fraction_DMPG"], ratio)]
-
-    peak_plots = {
-        "pos": "Peak Position (nm)",
-        "width": "Peak Width (nm)",
-        "area": "Peak Area (%)",
-    }
-
     surfactants = ["C12E6", "DDAC", "TX100"]
+    peak_cols = ["pos", "width", "area"]
 
     # Identify control rows
     control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
-
-    # ----- Peak plots (2x2 grid for control + each surfactant) -----
-    conditions = ["Control"] + surfactants
-    for key, ylabel in peak_plots.items():
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        axes = axes.flatten()
-
-        for i, cond in enumerate(conditions):
-            if cond == "Control":
-                sub = control
-                x = np.zeros(len(sub))  # Control points at 0 µM
-            else:
-                sub = pd.concat([control, df[df[cond] > 0]], ignore_index=True)
-                sub = sub.sort_values(cond)
-                x = sub[cond]
-
+    
+    for key in peak_cols:
+    
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
+    
+        for i, surf in enumerate(surfactants):
+    
+            ax = axes[i]
+            sub = df[df[surf] > 0].sort_values(surf)
+    
             if sub.empty:
                 continue
-
-            ax = axes[i]
-            for peak in [1, 2, 3]:
-                val = f"p{peak}_{key}"
-                err = f"{val}_err"
-                ax.errorbar(
-                    x,
-                    sub[val],
-                    yerr=sub[err],
-                    marker="o",
-                    linestyle="none",
-                    capsize=3,
-                    label=f"Peak {peak}",
-                )
-
-            ax.set_title(cond)
-            ax.set_xlabel("Surfactant concentration (µM)")
-            ax.set_xscale("log" if cond != "Control" else "linear")
-            ax.set_ylabel(ylabel)
-            ax.legend()
-
-        # Remove unused subplots if less than 4
-        for j in range(len(conditions), len(axes)):
-            fig.delaxes(axes[j])
-
-        fig.tight_layout()
-        fig.savefig(PLOTS_FOLDER / f"{key}_conc_2x2.png", dpi=300)
+    
+            rows = pd.concat([control, sub], ignore_index=True)
+            conc = np.concatenate([np.full(len(control), 0), sub[surf].values])
+    
+            width = 0.25
+    
+            for k, (_, row) in enumerate(rows.iterrows()):
+    
+                peaks = []
+                for peak in [1, 2, 3]:
+                    peaks.append({
+                        "value": row[f"p{peak}_{key}"],
+                        "err": row[f"p{peak}_{key}_err"],
+                        "area": row[f"p{peak}_area"]
+                    })
+    
+                # Order by decreasing area
+                peaks = sorted(peaks, key=lambda p: p["area"], reverse=True)
+    
+                for j, p in enumerate(peaks):
+    
+                    x = k + (j - 1) * width
+                    colour = cmap(norm(p["area"]))
+    
+                    ax.bar(
+                        x,
+                        p["value"],
+                        width=width,
+                        yerr=p["err"],
+                        capsize=3,
+                        color=colour,
+                        edgecolor="black",
+                    )
+    
+            ax.set_xticks(range(len(conc)))
+            ax.set_xticklabels([f"{c:g}" for c in conc])
+            ax.set_xlabel(f"{surf} concentration (µM)")
+            ax.set_ylabel(peak_labels[key])
+            ax.set_title(surf)
+    
+        # Add shared colourbar
+        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+    
+        cbar = fig.colorbar(sm, ax=axes, pad=0.02)
+        cbar.set_label("Peak Area (%)")
+    
+        fig.savefig(PLOTS_FOLDER / f"{key}_conc_1x3.png", dpi=300)
         plt.show()
 
     # ----- Zeta plot (single plot for all surfactants) -----
     fig, ax = plt.subplots()
     for surf in surfactants:
-        sub = pd.concat([control, df[df[surf] > 0]], ignore_index=True)
-        sub = sub.sort_values(surf)
+        sub = df[df[surf] > 0].sort_values(surf)
         if sub.empty:
             continue
 
+        x = np.concatenate([np.full(len(control), 0.1), sub[surf].values])
+        y = np.concatenate([control["zeta"].values, sub["zeta"].values])
+        yerr = np.concatenate([control["zeta_err"].values, sub["zeta_err"].values])
+
         ax.errorbar(
-            sub[surf],
-            sub["zeta"],
-            yerr=sub["zeta_err"],
-            marker="o",
-            linestyle="-",
-            capsize=3,
-            label=surf,
-            color=colours[surf],
+            x, y, yerr=yerr, marker="o", linestyle="-", capsize=3, label=surf, color=colours[surf]
         )
 
     ax.set_xlabel("Surfactant concentration (µM)")
     ax.set_ylabel("Zeta Potential (mV)")
-    ax.set_xscale("log")
     ax.legend()
 
     fig.tight_layout()
@@ -240,38 +262,66 @@ def create_fraction_plots(df):
     }
 
     # ----- Peak plots -----
-    for key, ylabel in peak_plots.items():
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-        axes = axes.flatten()  # easier indexing
-
+    for key in peak_plots.keys():
+    
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
+        axes = axes.flatten()
+    
         for i, cond in enumerate(conditions):
+    
             sub = df[df["condition"] == cond].sort_values("fraction_DMPG")
             if sub.empty:
                 continue
-
+    
             ax = axes[i]
-            for peak in [1, 2, 3]:
-                val = f"p{peak}_{key}"
-                err = f"{val}_err"
-                ax.errorbar(
-                    sub["fraction_DMPG"],
-                    sub[val],
-                    yerr=sub[err],
-                    marker="o",
-                    linestyle="none",
-                    capsize=3,
-                    label=f"Peak {peak}",
-                )
+    
+            width = 0.25
+    
+            for k, (_, row) in enumerate(sub.iterrows()):
+    
+                peaks = []
+                for peak in [1, 2, 3]:
+                    peaks.append({
+                        "value": row[f"p{peak}_{key}"],
+                        "err": row[f"p{peak}_{key}_err"],
+                        "area": row[f"p{peak}_area"],
+                    })
+    
+                # order bars by decreasing area
+                peaks = sorted(peaks, key=lambda p: p["area"], reverse=True)
+    
+                for j, p in enumerate(peaks):
+    
+                    x = k + (j - 1) * width
+                    colour = cmap(norm(p["area"]))
+    
+                    ax.bar(
+                        x,
+                        p["value"],
+                        width=width,
+                        yerr=p["err"],
+                        capsize=3,
+                        color=colour,
+                        edgecolor="black",
+                    )
+    
+            ax.set_xticks(range(len(sub)))
+            ax.set_xticklabels([f"{x:.2f}" for x in sub["fraction_DMPG"]])
+    
             ax.set_title(cond)
             ax.set_xlabel("DMPG Fraction")
-            ax.set_ylabel(ylabel)
-            ax.legend()
+            ax.set_ylabel(peak_labels[key])
 
-        # Remove empty subplots if less than 4 conditions
+        # remove unused subplot if fewer than 4 conditions
         for j in range(len(conditions), len(axes)):
             fig.delaxes(axes[j])
-
-        fig.tight_layout()
+    
+        # shared colourbar
+        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=axes, pad=0.02)
+        cbar.set_label("Peak Area (%)")
+    
         fig.savefig(PLOTS_FOLDER / f"{key}_fraction_2x2.png", dpi=300)
         plt.show()
 
@@ -330,7 +380,7 @@ def create_fraction_plots(df):
         ax.legend()
 
     axes[0].set_ylabel("Zeta Potential (mV)")
-    axes[1].set_ylabel("Δ Zeta Potential (mV) relative to control")
+    axes[1].set_ylabel("Zeta Potential - Control (mV)")
 
     fig.tight_layout()
     fig.savefig(PLOTS_FOLDER / "zeta_fraction.png", dpi=300)
@@ -345,8 +395,8 @@ if __name__ == "__main__":
 
     create_fraction_plots(df)
     
-    folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
 
-    df = gather_data(folder)
+    # df = gather_data(folder)
     
-    create_concentration_plots(df)
+    # create_concentration_plots(df)

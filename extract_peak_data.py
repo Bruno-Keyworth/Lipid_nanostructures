@@ -15,6 +15,7 @@ from get_filepaths import DATA_FOLDER
 from read_zetasizer_data import read_zetasizer_data, base_sample_name
 from read_sample_name import read_sample_name
 
+from sklearn.cluster import DBSCAN
 
 def parse_timestamp(ts):
 
@@ -81,42 +82,48 @@ def group_by_base_and_temp(data):
 
     return groups
 
-def cluster_peaks(entries, tol_nm=20, max_pos_nm=3000):
-    """
-    Cluster peaks from repeated measurements based on position proximity.
-    """
+def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
 
-    clusters = []
+    peaks = []
 
     for entry in entries:
+        for p in entry["peaks"]:
 
-        peaks = [
-            p for p in entry["peaks"]
             if (
                 p["peak_position_nm"] is not None
                 and p["peak_position_nm"] <= max_pos_nm
-                and (p["area_percent"] or 0) > 0
-            )
-        ]
+                and (p["area_percent"] or 0) > min_area
+            ):
+                peaks.append(p)
 
-        for peak in peaks:
+    if not peaks:
+        return []
 
-            pos = peak["peak_position_nm"]
-            placed = False
+    positions = np.array([p["peak_position_nm"] for p in peaks])
+    widths = np.array([p["peak_width_nm"] for p in peaks])
 
-            for cluster in clusters:
+    # compute pairwise normalised distance matrix
+    n = len(peaks)
+    dist = np.zeros((n, n))
 
-                mean_pos = np.mean([p["peak_position_nm"] for p in cluster])
+    for i in range(n):
+        for j in range(n):
+            width_scale = 0.25 * (widths[i] + widths[j])
+            dist[i, j] = abs(positions[i] - positions[j]) / width_scale
 
-                if abs(pos - mean_pos) <= tol_nm:
-                    cluster.append(peak)
-                    placed = True
-                    break
+    clustering = DBSCAN(
+        eps=1.0,
+        min_samples=1,
+        metric="precomputed"
+    ).fit(dist)
 
-            if not placed:
-                clusters.append([peak])
+    labels = clustering.labels_
 
-    return clusters
+    clusters = {}
+    for label, peak in zip(labels, peaks):
+        clusters.setdefault(label, []).append(peak)
+
+    return list(clusters.values())
 
 
 def average_measurements(input_file):
