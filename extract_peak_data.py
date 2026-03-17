@@ -83,7 +83,7 @@ def group_by_base_and_temp(data):
 
     return groups
 
-def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
+def cluster_peaks(entries, max_pos_nm = 3000, min_area=7):
     """
     Cluster peaks across repeated measurements and compute properly
     normalised average cluster properties with uncertainties.

@@ -143,7 +143,10 @@ def create_peak_figure(df_rows, keys, titles, xlabel_vals=None, xlabel_name=None
             
             ax.set_title(title)
             ax.set_ylabel(peak_labels[key])
-            ax.set_ylim(bottom=0)
+            if key == 'pos':
+                ax.set_yscale('log')
+            else: 
+                ax.set_ylim(bottom=0)
             ax.margins(y=0.05)
             if xlabel_name:
                 ax.set_xlabel(xlabel_name)
