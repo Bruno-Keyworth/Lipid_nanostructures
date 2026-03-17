@@ -127,6 +127,8 @@ def create_peak_figure(df_rows, x_values, keys, titles, xlabel_func, fig_shape=(
             ax.set_xticklabels([xlabel_func(val) for val in rows_label_values(rows)])
             ax.set_title(title)
             ax.set_ylabel(peak_labels[key])
+            ax.set_ylim(bottom=0)
+            ax.margins(y=0.05)
         
         # remove unused axes
         for ax in axes[len(df_rows):]:

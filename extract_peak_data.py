@@ -84,104 +84,159 @@ def group_by_base_and_temp(data):
     return groups
 
 def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
+    """
+    Cluster peaks across repeated measurements and compute properly
+    normalised average cluster properties with uncertainties.
 
-    peaks = []
+    Returns a list of clusters with structure:
+        {
+            "peak_position_nm": [mean, std],
+            "peak_width_nm": [mean, std],
+            "area_percent": [mean, std],
+            "n_measurements": int
+        }
 
-    for entry in entries:
-        for p in entry["peaks"]:
+    Notes:
+    - Each repeat is renormalised to sum to 100% before clustering.
+    - Clusters accumulate per-repeat contributions to compute mean and std.
+    """
+    all_peaks = []
+    peak_owner = []  # which entry each peak came from
 
-            if (
-                p["peak_position_nm"] is not None
-                and p["peak_position_nm"] <= max_pos_nm
-                and (p["area_percent"] or 0) > min_area
-            ):
-                peaks.append(p)
+    # ---- Step 1: filter + renormalise per repeat ----
+    for idx, entry in enumerate(entries):
+        peaks = [
+            p for p in entry["peaks"]
+            if p.get("peak_position_nm") is not None
+            and p.get("peak_width_nm") is not None
+            and (p.get("area_percent") or 0) > min_area
+            and p.get("peak_position_nm") <= max_pos_nm
+        ]
 
-    if not peaks:
+        if not peaks:
+            continue
+
+        # renormalise THIS repeat to sum to 100%
+        areas = np.array([p["area_percent"] for p in peaks], dtype=float)
+        areas = 100 * areas / areas.sum()
+
+        for p, a in zip(peaks, areas):
+            new_p = p.copy()
+            new_p["area_percent"] = a
+            all_peaks.append(new_p)
+            peak_owner.append(idx)
+
+    if not all_peaks:
         return []
 
-    positions = np.array([p["peak_position_nm"] for p in peaks])
-    widths = np.array([p["peak_width_nm"] for p in peaks])
+    positions = np.array([p["peak_position_nm"] for p in all_peaks])
+    widths = np.array([p["peak_width_nm"] for p in all_peaks])
 
-    # compute pairwise normalised distance matrix
-    n = len(peaks)
+    # ---- Step 2: clustering (width-scaled distance) ----
+    n = len(all_peaks)
     dist = np.zeros((n, n))
-
     for i in range(n):
         for j in range(n):
             width_scale = 0.25 * (widths[i] + widths[j])
             dist[i, j] = abs(positions[i] - positions[j]) / width_scale
 
-    clustering = DBSCAN(
-        eps=1.0,
-        min_samples=1,
-        metric="precomputed"
-    ).fit(dist)
+    labels = DBSCAN(eps=1.0, min_samples=1, metric="precomputed").fit(dist).labels_
 
-    labels = clustering.labels_
-
+    # ---- Step 3: group peaks by cluster ----
     clusters = {}
-    for label, peak in zip(labels, peaks):
-        clusters.setdefault(label, []).append(peak)
+    for label, peak, owner in zip(labels, all_peaks, peak_owner):
+        clusters.setdefault(label, []).append((peak, owner))
 
-    return list(clusters.values())
+    n_entries = len(entries)
+    results = []
+
+    # ---- Step 4: compute per-cluster statistics ----
+    for cluster in clusters.values():
+        # position and width: mean + std
+        pos_vals = [p["peak_position_nm"] for p, _ in cluster]
+        wid_vals = [p["peak_width_nm"] for p, _ in cluster]
+
+        pos_mean = float(np.mean(pos_vals))
+        pos_std = float(np.std(pos_vals, ddof=1)) if len(pos_vals) > 1 else 0.0
+
+        wid_mean = float(np.mean(wid_vals))
+        wid_std = float(np.std(wid_vals, ddof=1)) if len(wid_vals) > 1 else 0.0
+
+        # area_percent: compute per-entry contributions first
+        per_entry_area = np.zeros(n_entries)
+        for p, owner in cluster:
+            per_entry_area[owner] += p["area_percent"]
+
+        area_mean = float(np.mean(per_entry_area))
+        area_std = float(np.std(per_entry_area, ddof=1)) if np.count_nonzero(per_entry_area) > 1 else 0.0
+
+        n_measurements = int(np.count_nonzero(per_entry_area))
+
+        results.append({
+            "peak_position_nm": [pos_mean, pos_std],
+            "peak_width_nm": [wid_mean, wid_std],
+            "area_percent": [area_mean, area_std],
+            "n_measurements": n_measurements
+        })
+
+    # ---- Step 5: final renormalisation to 100% (safety) ----
+    total_area = sum(r["area_percent"][0] for r in results)
+    if total_area > 0:
+        for r in results:
+            r["area_percent"][0] = 100 * r["area_percent"][0] / total_area
+            # scale std proportionally
+            r["area_percent"][1] = 100 * r["area_percent"][1] / total_area
+
+    return results
 
 
 def average_measurements(input_file):
 
+    import json
+    import numpy as np
+
     with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    # ---- Split by type ----
     size_data = [d for d in data if d.get("type") == "size"]
     zeta_data = [d for d in data if d.get("type") == "zeta"]
 
+    # ---- Keep only latest measurements ----
     size_data = filter_latest_measurements(size_data)
     zeta_data = filter_latest_measurements(zeta_data)
 
+    # ---- Group ----
     size_groups = group_by_base_and_temp(size_data)
     zeta_groups = group_by_base_and_temp(zeta_data)
 
     all_keys = set(size_groups) | set(zeta_groups)
 
+    # ---- Process each condition ----
     for (base, temp) in all_keys:
 
+        # ---------- SIZE / PEAKS ----------
         entries = size_groups.get((base, temp), [])
 
         repeat_peaks = [
-        [
-            p for p in entry["peaks"]
-            if p["peak_position_nm"] is not None and (p["area_percent"] or 0) > 0
+            [
+                p for p in entry["peaks"]
+                if p["peak_position_nm"] is not None
+                and (p["area_percent"] or 0) > 0
+            ]
+            for entry in entries
         ]
-        for entry in entries
-        ]
-    
-        clusters = cluster_peaks(entries)
 
-        avg_peaks = []
+        # This now returns FINAL peaks with [mean, std]
+        avg_peaks = cluster_peaks(entries)
 
-        for cluster in clusters:
-        
-            positions = [p["peak_position_nm"] for p in cluster]
-            widths = [p["peak_width_nm"] for p in cluster]
-            areas = [p["area_percent"] for p in cluster]
-        
-            avg_peaks.append({
-                "peak_position_nm": [
-                    float(np.mean(positions)),
-                    float(np.std(positions, ddof=1)) if len(positions) > 1 else 0.0
-                ],
-                "peak_width_nm": [
-                    float(np.mean(widths)),
-                    float(np.std(widths, ddof=1)) if len(widths) > 1 else 0.0
-                ],
-                "area_percent": [
-                    float(np.mean(areas)),
-                    float(np.std(areas, ddof=1)) if len(areas) > 1 else 0.0
-                ],
-                "n_measurements": len(cluster)
-            })
+        # Sanity check (optional but useful)
+        if avg_peaks:
+            total_area = sum(p["area_percent"][0] for p in avg_peaks)
+            if not np.isclose(total_area, 100, atol=1e-6):
+                print(f"Warning: area sums to {total_area:.2f} for {base}, {temp}")
 
-
+        # ---------- ZETA ----------
         zeta_entries = zeta_groups.get((base, temp), [])
 
         repeat_zetas = [
@@ -198,6 +253,7 @@ def average_measurements(input_file):
         else:
             average_zeta = [None, None]
 
+        # ---------- OUTPUT ----------
         results = read_sample_name(base) | {
             "temperature_C": temp,
             "average_zeta": average_zeta,
