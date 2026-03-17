@@ -70,6 +70,9 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
 
     # Load all data once
     all_data = load_measurements(folder)
+    
+    overall_means =[]
+    overall_std =[]
 
     for idx, c in enumerate(control):
         means, errors = [], []
@@ -97,6 +100,10 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
             linewidth=0.6,
             label=f"{c} Extrusions",
         )
+        
+        
+        overall_means.append(np.nanmean(means))
+        overall_std.append(np.nanstd(means))
 
     ax.set_xticks(x)
     ax.set_xticklabels(independent)
@@ -108,8 +115,30 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
     plt.tight_layout()
     plt.savefig(PLOTS_FOLDER / filename, dpi=300)
     plt.show()
+    
+    fig, axis = plt.subplots(figsize=(10, 6))
 
-# ----------------------------
+    axis.errorbar(
+        control,
+        overall_means,
+        yerr=overall_std,
+        fmt='o-',
+        linewidth=2,
+        markersize=6,
+        capsize=5,
+        elinewidth=1.5,
+        markeredgewidth=1
+    )
+    
+    axis.set_xticks(control)
+    axis.set_xlabel("Number of Extrusions")
+    axis.set_ylabel(ylabel)
+    axis.grid(linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.show()        
+    
+    
+    # ----------------------------
 # Usage
 # ----------------------------
 if __name__ == "__main__":
