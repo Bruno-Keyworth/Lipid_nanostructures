@@ -94,24 +94,24 @@ def rows_label_values(rows):
         return rows["fraction_DMPG"].values
     return np.arange(len(rows))
 
-def create_peak_figure(df_rows, x_values, keys, titles, xlabel_func, fig_shape=(1, 3), filename_prefix="plot"):
+def create_peak_figure(df_rows, keys, titles, xlabel_vals=None, xlabel_name=None, fig_shape=(1, 3), filename_prefix="plot"):
     """
-    General function to create peak plots.
+    Create peak plots with integer bar positions but custom x-axis labels.
     
     Parameters
     ----------
     df_rows : list of pd.DataFrame
         One DataFrame per subplot/condition.
-    x_values : list of arrays
-        X positions for each subplot.
     keys : list of str
         'pos', 'width', 'area'.
     titles : list of str
         Titles for each subplot.
-    xlabel_func : callable
-        Function to generate x-axis labels given the data.
+    xlabel_vals : list of lists, optional
+        List of numeric values for x-axis labels (one list per subplot). If None, uses indices.
+    xlabel_name : str, optional
+        Name to show below x-axis (e.g. 'Lipid fraction', 'Surfactant concentration')
     fig_shape : tuple
-        Figure grid shape.
+        Grid shape.
     filename_prefix : str
         Prefix for saved figure.
     """
@@ -119,18 +119,35 @@ def create_peak_figure(df_rows, x_values, keys, titles, xlabel_func, fig_shape=(
         fig, axes = plt.subplots(*fig_shape, figsize=(6*fig_shape[1], 4*fig_shape[0]), constrained_layout=True)
         axes = np.array(axes).flatten()
         
-        for ax, rows, title in zip(axes, df_rows, titles):
+        for i, (ax, rows, title) in enumerate(zip(axes, df_rows, titles)):
             if rows.empty:
                 continue
-            plot_peak_bars(ax, rows, key)
-            ax.set_xticks(range(len(rows)))  # integer indices
-            ax.set_xticklabels([xlabel_func(val) for val in rows_label_values(rows)])
+            
+            # Inside create_peak_figure, for each subplot:
+            x_pos = np.arange(len(rows))  # integer bar positions
+            plot_peak_bars(ax, rows, key, width=0.25)  # positions handled inside plot_peak_bars
+            
+            # Set ticks and labels
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[i]])  # numeric values for display
+            if xlabel_name:
+                ax.set_xlabel(xlabel_name)
+            
+            # tick labels
+            if xlabel_vals is not None:
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[i]])
+            else:
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels([str(v) for v in x_pos])
+            
             ax.set_title(title)
             ax.set_ylabel(peak_labels[key])
             ax.set_ylim(bottom=0)
             ax.margins(y=0.05)
+            if xlabel_name:
+                ax.set_xlabel(xlabel_name)
         
-        # remove unused axes
         for ax in axes[len(df_rows):]:
             fig.delaxes(ax)
         
@@ -163,9 +180,15 @@ def create_concentration_plots(df, ratio=0.3, zeta=True):
         x_vals.append(np.concatenate([np.full(len(control), 0), sub[surf].values]))
         titles.append(surf)
     
-    create_peak_figure(df_rows, x_vals, ["pos", "width", "area"], titles,
-                       xlabel_func=lambda c: f"{c:g}", fig_shape=(1, 3), filename_prefix="conc_1x3")
-    
+    create_peak_figure(
+    df_rows=df_rows,
+    keys=["pos", "width", "area"],
+    titles=titles,
+    xlabel_vals=x_vals,              # surfactant concentrations
+    xlabel_name=r"Surfactant concentration ($\mu$M)",
+    fig_shape=(1,3),
+    filename_prefix="concentration"
+    )
     if zeta:
         plot_zeta_against_concentration(df, surfactants)
 
@@ -184,9 +207,15 @@ def create_fraction_plots(df, zeta=True):
         x_vals.append(sub["fraction_DMPG"].values if not sub.empty else [])
         titles.append(cond)
     
-    create_peak_figure(df_rows, x_vals, ["pos", "width", "area"], titles,
-                       xlabel_func=lambda x: f"{x:.2f}", fig_shape=(2, 2), filename_prefix="fraction_2x2")
-    
+    create_peak_figure(
+    df_rows=df_rows,
+    keys=["pos", "width", "area"],
+    titles=titles,
+    xlabel_vals=x_vals,              # DMPG fractions
+    xlabel_name="DMPG fraction",
+    fig_shape=(2,2),
+    filename_prefix="fraction"
+    )
     if zeta:
         plot_zeta_against_fraction(df, conditions)
 
