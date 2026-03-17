@@ -61,32 +61,48 @@ def extract_sigmas(data):
     return [d["peak_sigma_nm"] for d in data if "peak_sigma_nm" in d and d["peak_sigma_nm"] > 0]
 
 # ----------------------------
-# Grouped bar plot
+# Compute stats
 # ----------------------------
-def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="POPC"):
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = np.arange(len(independent))
-    bar_width = 0.8 / len(control)
+def compute_group_stats(all_data, control, independent, extractor):
+    stats = {}
 
-    # Load all data once
-    all_data = load_measurements(folder)
-    
-    overall_means =[]
-    overall_std =[]
-
-    for idx, c in enumerate(control):
+    for c in control:
         means, errors = [], []
 
         for i in independent:
-            # filter by temperature and extrusion
-            data = [d for d in all_data if d["temperature_C"] == i and d["extrusion"] == c]
+            data = [
+                d for d in all_data
+                if d["temperature_C"] == i and d["extrusion"] == c
+            ]
             values = extractor(data)
+
             if len(values) >= 2:
                 means.append(np.mean(values))
                 errors.append(np.std(values, ddof=1))
             else:
                 means.append(np.nan)
                 errors.append(np.nan)
+
+        stats[c] = {
+            "means": means,
+            "errors": errors,
+            "overall_mean": np.nanmean(means),
+            "overall_std": np.nanstd(means),
+        }
+
+    return stats
+
+
+# ----------------------------
+# Plot grouped bars
+# ----------------------------
+def plot_grouped_bars(ax, stats, control, independent, ylabel):
+    x = np.arange(len(independent))
+    bar_width = 0.8 / len(control)
+
+    for idx, c in enumerate(control):
+        means = stats[c]["means"]
+        errors = stats[c]["errors"]
 
         offset = (idx - (len(control) - 1) / 2) * bar_width
 
@@ -100,10 +116,6 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
             linewidth=0.6,
             label=f"{c} Extrusions",
         )
-        
-        
-        overall_means.append(np.nanmean(means))
-        overall_std.append(np.nanstd(means))
 
     ax.set_xticks(x)
     ax.set_xticklabels(independent)
@@ -112,13 +124,15 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
     ax.legend()
     ax.grid(linestyle="--", alpha=0.3)
 
-    plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / filename, dpi=300)
-    plt.show()
-    
-    fig, axis = plt.subplots(figsize=(10, 6))
 
-    axis.errorbar(
+# ----------------------------
+# Plot overall trend
+# ----------------------------
+def plot_overall_trend(ax, stats, control, ylabel):
+    overall_means = [stats[c]["overall_mean"] for c in control]
+    overall_std = [stats[c]["overall_std"] for c in control]
+
+    ax.errorbar(
         control,
         overall_means,
         yerr=overall_std,
@@ -129,18 +143,33 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
         elinewidth=1.5,
         markeredgewidth=1
     )
-    
-    axis.set_xticks(control)
-    axis.set_xlabel("Number of Extrusions")
-    axis.set_ylabel(ylabel)
-    axis.grid(linestyle="--", alpha=0.3)
+
+    ax.set_xticks(control)
+    ax.set_xlabel("Number of Extrusions")
+    ax.set_ylabel(ylabel)
+    ax.grid(linestyle="--", alpha=0.3)
+
+
+def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="POPC"):
+    all_data = load_measurements(folder)
+
+    stats = compute_group_stats(all_data, control, independent, extractor)
+
+    # --- grouped bars ---
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plot_grouped_bars(ax, stats, control, independent, ylabel)
+
     plt.tight_layout()
-    plt.show()        
-    
-    
-    # ----------------------------
-# Usage
-# ----------------------------
+    plt.savefig(PLOTS_FOLDER / filename, dpi=300)
+    plt.show()
+
+    # --- overall trend ---
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plot_overall_trend(ax, stats, control, ylabel)
+
+    plt.tight_layout()
+    plt.show()
+
 if __name__ == "__main__":
     extrusions = [3, 5, 10, 15, 20, 31, 41]
     temperatures = [10, 20, 30, 40, 50, 60]
