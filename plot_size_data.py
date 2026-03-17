@@ -160,14 +160,14 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
     plot_grouped_bars(ax, stats, control, independent, ylabel)
 
     plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / filename, dpi=300)
+    plt.savefig(PLOTS_FOLDER / f"{filename}_Temp_plot.png", dpi=300)
     plt.show()
 
     # --- overall trend ---
     fig, ax = plt.subplots(figsize=(10, 6))
     plot_overall_trend(ax, stats, control, ylabel)
-
     plt.tight_layout()
+    plt.savefig(PLOTS_FOLDER / f"{filename}_extrusion.png" , dpi=300)
     plt.show()
 
 if __name__ == "__main__":
@@ -179,7 +179,7 @@ if __name__ == "__main__":
         temperatures,
         extractor=extract_peak_diameters,
         ylabel="Peak Diameter (nm)",
-        filename="Diameter_Temp_plot.png",
+        filename="Diameter",
         folder="POPC"
     )
 
@@ -188,6 +188,6 @@ if __name__ == "__main__":
         temperatures,
         extractor=extract_sigmas,
         ylabel="Mean Standard Deviation (nm)",
-        filename="Sigma_Temp_plot.png",
+        filename="Sigma",
         folder="POPC"
     )
