@@ -32,6 +32,16 @@ def extract_extrusion(sample_name):
     except Exception:
         return None
 
+def is_valid_sample(sample_name):
+    if not sample_name:
+        return False
+    
+    if "new_sample" in sample_name:
+        return False
+    
+    pattern = r"^31 Extrusion POPC 0\.2 mg_ml \d+ degrees \d+$"
+    return bool(re.match(pattern, sample_name))
+
 
 def load_entries():
     entries = []
@@ -40,6 +50,13 @@ def load_entries():
             data = json.load(f)
         for d in data:
             sample_name = d.get("sample_name")
+
+            if not sample_name:
+                continue
+            
+            if not is_valid_sample(sample_name):
+                continue
+            
             if extract_extrusion(sample_name) != extrusion:
                 continue
             entries.append(d)

@@ -189,7 +189,6 @@ def cluster_peaks(entries, max_pos_nm = 3000, min_area=7):
 
     return results
 
-
 def average_measurements(input_file):
 
     import json
