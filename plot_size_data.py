@@ -224,7 +224,7 @@ if __name__ == "__main__":
         extrusions,
         temperatures,
         extractor=extract_sigmas,
-        ylabel="Mean Standard Deviation (nm)",
+        ylabel="Peak Width (nm)",
         filename="Sigma",
         folder="POPC"
     )
