@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
+from datetime import datetime
 
 # ----------------------------
 # Load measurements from JSON
@@ -21,10 +22,12 @@ def load_measurements(folder="POPC"):
     """
     Load all JSON data from the folder.
     Extract temperature and extrusion from sample_name.
+    Keep only the latest entry per sample_name.
     Choose peak with largest area.
     """
     folder_path = DATA_FOLDER / folder
-    entries = []
+
+    latest_entries = {}
 
     for file_path in folder_path.glob("*.json"):
         with open(file_path, "r", encoding="utf-8") as f:
@@ -32,22 +35,45 @@ def load_measurements(folder="POPC"):
 
         for entry in data:
             sample_name = entry.get("sample_name", "")
+            sample_name = re.sub(r"\bnew_sample\b\s*", "", sample_name)
+            sample_name = re.sub(r"\s+", " ", sample_name).strip()
+            timestamp_str = entry.get("timestamp")
 
-            # Extract extrusion from sample_name
-            extrusion_match = re.search(r"(\d+)\s+Extrusion", sample_name)
-            entry["extrusion"] = int(extrusion_match.group(1)) if extrusion_match else 0
+            if not timestamp_str:
+                continue  # skip if no timestamp
 
-            # Extract temperature from sample_name
-            temp_match = re.search(r"(\d+)\s+degrees", sample_name)
-            entry["temperature_C"] = float(temp_match.group(1)) if temp_match else 0
+            # parse timestamp (adjust format if needed)
+            timestamp = datetime.strptime(timestamp_str, "%d %B %Y %H:%M:%S")
 
-            # pick peak with largest area
-            if entry.get("peaks"):
-                peak = max(entry["peaks"], key=lambda x: float(x.get("area_percent") or 0))
-                entry["peak_size_nm"] = float(peak.get("peak_position_nm") or 0)
-                entry["peak_sigma_nm"] = float(peak.get("peak_width_nm") or 0)
+            # keep only latest entry per sample_name
+            if (
+                sample_name not in latest_entries
+                or timestamp > latest_entries[sample_name]["_parsed_timestamp"]
+            ):
+                entry["_parsed_timestamp"] = timestamp
+                latest_entries[sample_name] = entry
 
-            entries.append(entry)
+    # now process only deduplicated entries
+    entries = []
+
+    for entry in latest_entries.values():
+        sample_name = entry.get("sample_name", "")
+
+        # Extract extrusion
+        extrusion_match = re.search(r"(\d+)\s+Extrusion", sample_name)
+        entry["extrusion"] = int(extrusion_match.group(1)) if extrusion_match else 0
+
+        # Extract temperature
+        temp_match = re.search(r"(\d+)\s+degrees", sample_name)
+        entry["temperature_C"] = float(temp_match.group(1)) if temp_match else 0
+
+        # pick peak with largest area
+        if entry.get("peaks"):
+            peak = max(entry["peaks"], key=lambda x: float(x.get("area_percent") or 0))
+            entry["peak_size_nm"] = float(peak.get("peak_position_nm") or 0)
+            entry["peak_sigma_nm"] = float(peak.get("peak_width_nm") or 0)
+
+        entries.append(entry)
 
     return entries
 
@@ -128,25 +154,36 @@ def plot_grouped_bars(ax, stats, control, independent, ylabel):
 # ----------------------------
 # Plot overall trend
 # ----------------------------
-def plot_overall_trend(ax, stats, control, ylabel):
-    overall_means = [stats[c]["overall_mean"] for c in control]
-    overall_std = [stats[c]["overall_std"] for c in control]
+def plot_trend_at_temperature(ax, all_data, control, temperature, extractor, ylabel):
+    means, errors = [], []
+
+    for c in control:
+        data = [
+            d for d in all_data
+            if d["temperature_C"] == temperature and d["extrusion"] == c
+        ]
+
+        values = extractor(data)
+
+        if len(values) >= 2:
+            means.append(np.mean(values))
+            errors.append(np.std(values, ddof=1))
+        else:
+            means.append(np.nan)
+            errors.append(np.nan)
 
     ax.errorbar(
         control,
-        overall_means,
-        yerr=overall_std,
+        means,
+        yerr=errors,
         fmt='o-',
         linewidth=2,
         markersize=6,
         capsize=5,
-        elinewidth=1.5,
-        markeredgewidth=1
     )
 
-    ax.set_xticks(control)
     ax.set_xlabel("Number of Extrusions")
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(f"{ylabel} (at {temperature}°C)")
     ax.grid(linestyle="--", alpha=0.3)
 
 
@@ -163,15 +200,15 @@ def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="
     plt.savefig(PLOTS_FOLDER / f"{filename}_Temp_plot.png", dpi=300)
     plt.show()
 
-    # --- overall trend ---
     fig, ax = plt.subplots(figsize=(10, 6))
-    plot_overall_trend(ax, stats, control, ylabel)
+    plot_trend_at_temperature(ax, all_data, control, 30, extractor, ylabel)
+    
     plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"{filename}_extrusion.png" , dpi=300)
+    plt.savefig(PLOTS_FOLDER / f"{filename}_extrusion_30C.png", dpi=300)
     plt.show()
 
 if __name__ == "__main__":
-    extrusions = [3, 5, 10, 15, 20, 31, 41]
+    extrusions = [3, 5, 10, 15, 20, 31, 41, 51, 61]
     temperatures = [10, 20, 30, 40, 50, 60]
 
     grouped_bar_plot(

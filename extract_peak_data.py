@@ -363,7 +363,7 @@ if __name__ == '__main__':
 
     read_zetasizer_data("POPC_POPG_fraction_sizes.txt", "POPC-POPG")
     read_zetasizer_data("POPC_POPG_zetas.txt", "POPC-POPG")
-    read_zetasizer_data("POPC_temp_extrusion_size.txt", "POPC")
+    read_zetasizer_data("POPC_temp_extrsusion_size.txt", "POPC")
     read_zetasizer_data("surfactant_sizes.txt", "surfactants")
     read_zetasizer_data("surfactant_zetas.txt", "surfactants")
 
