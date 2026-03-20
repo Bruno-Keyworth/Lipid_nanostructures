@@ -1,0 +1,21 @@
+Record	Type	Sample Name	Measurement Date and Time	T	ZP	Mob	Cond
+ 		 	 	Â°C	mV	Âµmcm/Vs	mS/cm
+4	Zeta	7 POPC : 3 POPG 1	19 February 2026 12:56:07	25.0	-37.3	-2.923	15.5
+5	Zeta	7 POPC : 3 POPG 2	19 February 2026 12:58:50	25.0	-34.5	-2.701	16.1
+6	Zeta	7 POPC : 3 POPG 3	19 February 2026 12:59:10	25.0	-38.0	-2.977	16.4
+14	Zeta	9 POPC : 1 POPG 0.2 mg_ml 1	19 February 2026 15:19:36	25.0	-27.8	-2.176	13.9
+15	Zeta	9 POPC : 1 POPG 0.2 mg_ml 2	19 February 2026 15:23:31	25.0	-33.3	-2.612	15.7
+16	Zeta	9 POPC : 1 POPG 0.2 mg_ml 3	19 February 2026 15:24:14	25.0	-30.0	-2.354	16.1
+20	Zeta	9 POPC : 1 POPG 0.1 mg_ml 1	19 February 2026 15:57:45	25.0	-17.5	-1.373	14.9
+21	Zeta	9 POPC : 1 POPG 0.1 mg_ml 2	19 February 2026 16:00:31	25.0	-17.5	-1.375	15.6
+22	Zeta	9 POPC : 1 POPG 0.1 mg_ml 3	19 February 2026 16:00:55	25.0	-18.7	-1.470	16.1
+23	Zeta	9 POPC : 1 POPG 0.4 mg_ml 1	19 February 2026 16:16:09	25.0	-29.1	-2.283	14.5
+24	Zeta	9 POPC : 1 POPG 0.4 mg_ml 2	19 February 2026 16:18:55	25.0	-31.8	-2.492	15.3
+25	Zeta	9 POPC : 1 POPG 0.4 mg_ml 3	19 February 2026 16:19:15	25.0	-30.8	-2.412	15.7
+29	Zeta	6 POPC : 4 POPG 0.2 mg_ml 1	19 February 2026 16:36:20	25.0	-28.4	-2.230	15.2
+30	Zeta	6 POPC : 4 POPG 0.2 mg_ml 2	19 February 2026 16:38:58	25.0	-28.7	-2.252	15.8
+31	Zeta	6 POPC : 4 POPG 0.2 mg_ml 3	19 February 2026 16:39:18	25.0	-27.7	-2.171	16.3
+32	Zeta	10 POPC : 0 POPG 0.2 mg_ml 1	19 February 2026 16:48:26	25.0	1.15	0.09045	15.0
+33	Zeta	10 POPC : 0 POPG 0.2 mg_ml 2	19 February 2026 16:53:03	25.0	1.40	0.1101	17.2
+34	Zeta	10 POPC : 0 POPG 0.2 mg_ml 3	19 February 2026 16:55:20	25.0	-1.26	-0.09876	17.9
+

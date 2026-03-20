@@ -13,6 +13,74 @@ import re
 from pathlib import Path
 from get_filepaths import DATA_FOLDER
 
+def split_zeta_size_file(input_path, output_dir):
+    """
+    Splits a raw Zetasizer export into two files:
+        - *_size.txt
+        - *_zeta.txt
+
+    Handles multiple blocks and ignores summary sections.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    size_lines = []
+    zeta_lines = []
+
+    current_block = None
+    keep_block = False
+
+    with open(input_path, "r", encoding="latin1") as f:
+        for line in f:
+            line_strip = line.strip()
+
+            # Detect new header
+            if line_strip.startswith("Record\tType"):
+                if "Z-Ave" in line:
+                    current_block = "size"
+                elif "ZP" in line:
+                    current_block = "zeta"
+                else:
+                    current_block = None
+
+                keep_block = True
+
+                if current_block == "size":
+                    size_lines.append(line)
+                elif current_block == "zeta":
+                    zeta_lines.append(line)
+
+                continue
+
+            # Skip summary sections
+            if line_strip.startswith(("Mean", "Minimum", "Maximum")):
+                keep_block = False
+                continue
+
+            if not keep_block:
+                continue
+
+            if current_block == "size":
+                size_lines.append(line)
+            elif current_block == "zeta":
+                zeta_lines.append(line)
+
+    # Write outputs
+    base = Path(input_path).stem
+
+    size_file = output_dir / f"{base}_size.txt"
+    zeta_file = output_dir / f"{base}_zeta.txt"
+
+    if size_lines:
+        with open(size_file, "w", encoding="utf-8") as f:
+            f.writelines(size_lines)
+
+    if zeta_lines:
+        with open(zeta_file, "w", encoding="utf-8") as f:
+            f.writelines(zeta_lines)
+
+    return size_file, zeta_file
+
 def _parse_array(cell):
     """Convert space-separated numeric string to numpy array."""
     if pd.isna(cell):
@@ -48,10 +116,21 @@ def base_sample_name(name):
         parts = parts[:-1]
     return " ".join(parts)
 
-def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
+def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
+    """
+    Reads a Zetasizer CSV (size, zeta, or combined) and saves/merges JSON per sample.
 
+    Preserves original functionality:
+        - Uses DATA_FOLDER
+        - Uses base_sample_name
+        - Uses _safe_filename
+        - Skips duplicates
+        - Parses size peaks, zeta, etc.
+    """
+
+    # Load CSV from DATA_FOLDER
     df = pd.read_csv(
-        DATA_FOLDER / csv_path,
+        csv_path,
         encoding=encoding,
         sep=sep,
         engine="python",
@@ -59,23 +138,31 @@ def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
         on_bad_lines="warn"
     )
 
+    # Remove empty rows or repeated headers
     df = df[df["Sample Name"].notna()]
     df = df[df["Sample Name"] != "Sample Name"]
 
+    # Skip rows without a valid Type
+    df = df[df["Type"].notna()]
+
+    # Normalise type to lowercase
+    df["Type"] = df["Type"].str.strip().str.lower()
+
+    # Ensure output directory exists
     out_dir = DATA_FOLDER / save_to_folder
     os.makedirs(out_dir, exist_ok=True)
 
+    # Group by base sample name
     df["Base Sample Name"] = df["Sample Name"].apply(base_sample_name)
     grouped = df.groupby("Base Sample Name")
 
     for base_name, group in grouped:
 
-        # Load existing data if file exists (so size + zeta can merge)
         file_path = out_dir / (_safe_filename(base_name) + ".json")
         data = []
-        data = []
         existing_timestamps = set()
-        
+
+        # Load existing data if present
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -89,15 +176,14 @@ def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
             # Skip duplicates
             if timestamp in existing_timestamps:
                 continue
+
             entry = {
                 "sample_name": row["Sample Name"],
-                "timestamp": row.get("Measurement Date and Time"),
+                "timestamp": timestamp,
                 "temperature_C": row.get("T"),
             }
-            if not isinstance(row.get("Type"), str):
-                continue
 
-            if row["Type"].strip().lower() == "size":
+            if row["Type"] == "size":
                 sizes = _parse_array(row.get("Sizes"))
                 intensities = _parse_array(row.get("Intensities"))
                 entry.update({
@@ -124,33 +210,52 @@ def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                     "z_average_nm": row.get("Z-Ave"),
                     "pdi": row.get("PdI")
                 })
-            elif row["Type"].strip().lower() == "zeta":
+
+            elif row["Type"] == "zeta":
                 entry.update({
                     "type": "zeta",
-                    "zeta_mV": row.get("ZP"),
-                    "mobility_umcm_Vs": row.get("Mob"),
-                    "conductivity_mScm": row.get("Cond")
+                    "zeta_mV": float(row.get("ZP")),
+                    "mobility_umcm_Vs": float(row.get("Mob")),
+                    "conductivity_mScm": float(row.get("Cond"))
                 })
+
             else:
-                print(f"Cannot read measurement type: {row['Type'].strip().lower()}")
+                print(f"Cannot read measurement type: {row['Type']}")
                 continue
 
-            # store remaining metadata
-            # entry["metadata"] = {
-            #     k: row[k]
-            #     for k in row.index
-            #     if k not in [
-            #         "Sample Name",
-            #         "Base Sample Name",
-            #         "Measurement Date and Time",
-            #         "T",
-            #         "Sizes",
-            #         "Intensities",
-            #         "Type"
-            #     ]
-            # }
             existing_timestamps.add(timestamp)
             data.append(entry)
 
+        # Write merged JSON back
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+            
+def read_zetasizer_data(file, output_folder):
+    """
+    Full pipeline:
+        raw files → split into size/zeta → parsed into JSON
+
+    Parameters
+    ----------
+    raw_folder : folder containing original exports
+    split_folder : where split txt files go
+    json_folder : where JSON output goes
+    """
+    file = DATA_FOLDER / file
+
+    print(f"Processing: {file.name}")
+
+    size_file, zeta_file = split_zeta_size_file(file, output_folder)
+
+    # Feed BOTH into your existing parser
+    if size_file.exists():
+        read_zetasizer_file(
+            csv_path=size_file,
+            save_to_folder=output_folder
+        )
+
+    if zeta_file.exists():
+        read_zetasizer_file(
+            csv_path=zeta_file,
+            save_to_folder=output_folder
+        )

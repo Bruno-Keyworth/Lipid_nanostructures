@@ -393,6 +393,7 @@ if __name__ == '__main__':
     read_zetasizer_data("surfactant_sizes.txt", "surfactants")
     read_zetasizer_data("surfactant_zetas.txt", "surfactants")
     read_zetasizer_data('data_from_kate.txt', 'data_from_kate')
+    read_zetasizer_data('time_since_extrusion.txt', 'POPC')
 
     process_folder("POPC")
     process_folder("POPC-POPG")
