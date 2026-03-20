@@ -38,9 +38,15 @@ def parse_timestamp(ts):
 
     return None
 
+def safe_float(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
 def _output_file(input_file, temp):
 
-    out_folder = input_file.parent / f"{int(temp)}_degrees"
+    out_folder = input_file.parent / f"{int(float(temp))}_degrees"
     out_folder.mkdir(exist_ok=True)
 
     return out_folder / input_file.name
@@ -83,76 +89,76 @@ def group_by_base_and_temp(data):
 
     return groups
 
-def cluster_peaks(entries, max_pos_nm = 3000, min_area=7):
-    """
-    Cluster peaks across repeated measurements and compute properly
-    normalised average cluster properties with uncertainties.
+def extract_valid_peaks(entry, min_area, max_pos_nm):
+    peaks = []
 
-    Returns a list of clusters with structure:
-        {
-            "peak_position_nm": [mean, std],
-            "peak_width_nm": [mean, std],
-            "area_percent": [mean, std],
-            "n_measurements": int
-        }
+    for p in entry.get("peaks", []):
+        pos = safe_float(p.get("peak_position_nm"))
+        width = safe_float(p.get("peak_width_nm"))
+        area = safe_float(p.get("area_percent"))
 
-    Notes:
-    - Each repeat is renormalised to sum to 100% before clustering.
-    - Clusters accumulate per-repeat contributions to compute mean and std.
-    """
-    all_peaks = []
-    peak_owner = []  # which entry each peak came from
-
-    # ---- Step 1: filter + renormalise per repeat ----
-    for idx, entry in enumerate(entries):
-        peaks = [
-            p for p in entry["peaks"]
-            if p.get("peak_position_nm") is not None
-            and p.get("peak_width_nm") is not None
-            and (p.get("area_percent") or 0) > min_area
-            and p.get("peak_position_nm") <= max_pos_nm
-        ]
-
-        if not peaks:
+        if (
+            pos is None or width is None or area is None
+            or pos <= 0 or width <= 0
+            or area <= min_area
+            or pos > max_pos_nm
+        ):
             continue
 
-        # renormalise THIS repeat to sum to 100%
-        areas = np.array([p["area_percent"] for p in peaks], dtype=float)
-        areas = 100 * areas / areas.sum()
+        peaks.append({
+            "peak_position_nm": pos,
+            "peak_width_nm": width,
+            "area_percent": area,
+        })
 
-        for p, a in zip(peaks, areas):
-            new_p = p.copy()
-            new_p["area_percent"] = a
-            all_peaks.append(new_p)
-            peak_owner.append(idx)
+    return peaks
 
-    if not all_peaks:
+def renormalise_peaks(peaks):
+    if not peaks:
         return []
 
-    positions = np.array([p["peak_position_nm"] for p in all_peaks])
-    widths = np.array([p["peak_width_nm"] for p in all_peaks])
+    areas = np.array([p["area_percent"] for p in peaks])
+    total = areas.sum()
 
-    # ---- Step 2: clustering (width-scaled distance) ----
-    n = len(all_peaks)
+    if total == 0:
+        return []
+
+    scale = 100 / total
+
+    for p in peaks:
+        p["area_percent"] *= scale
+
+    return peaks
+
+def collect_all_peaks(entries, min_area, max_pos_nm):
+    all_peaks = []
+    peak_owner = []
+
+    for idx, entry in enumerate(entries):
+        peaks = extract_valid_peaks(entry, min_area, max_pos_nm)
+        peaks = renormalise_peaks(peaks)
+
+        for p in peaks:
+            all_peaks.append(p)
+            peak_owner.append(idx)
+
+    return all_peaks, peak_owner
+
+def build_distance_matrix(positions, widths):
+    n = len(positions)
     dist = np.zeros((n, n))
+
     for i in range(n):
         for j in range(n):
             width_scale = 0.25 * (widths[i] + widths[j])
             dist[i, j] = abs(positions[i] - positions[j]) / width_scale
 
-    labels = DBSCAN(eps=1.0, min_samples=1, metric="precomputed").fit(dist).labels_
+    return dist
 
-    # ---- Step 3: group peaks by cluster ----
-    clusters = {}
-    for label, peak, owner in zip(labels, all_peaks, peak_owner):
-        clusters.setdefault(label, []).append((peak, owner))
-
-    n_entries = len(entries)
+def compute_cluster_stats(clusters, peak_owner, n_entries):
     results = []
 
-    # ---- Step 4: compute per-cluster statistics ----
     for cluster in clusters.values():
-        # position and width: mean + std
         pos_vals = [p["peak_position_nm"] for p, _ in cluster]
         wid_vals = [p["peak_width_nm"] for p, _ in cluster]
 
@@ -162,30 +168,50 @@ def cluster_peaks(entries, max_pos_nm = 3000, min_area=7):
         wid_mean = float(np.mean(wid_vals))
         wid_std = float(np.std(wid_vals, ddof=1)) if len(wid_vals) > 1 else 0.0
 
-        # area_percent: compute per-entry contributions first
         per_entry_area = np.zeros(n_entries)
+
         for p, owner in cluster:
             per_entry_area[owner] += p["area_percent"]
 
         area_mean = float(np.mean(per_entry_area))
         area_std = float(np.std(per_entry_area, ddof=1)) if np.count_nonzero(per_entry_area) > 1 else 0.0
 
-        n_measurements = int(np.count_nonzero(per_entry_area))
-
         results.append({
             "peak_position_nm": [pos_mean, pos_std],
             "peak_width_nm": [wid_mean, wid_std],
             "area_percent": [area_mean, area_std],
-            "n_measurements": n_measurements
+            "n_measurements": int(np.count_nonzero(per_entry_area)),
         })
 
-    # ---- Step 5: final renormalisation to 100% (safety) ----
+    return results
+
+def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
+
+    all_peaks, peak_owner = collect_all_peaks(entries, min_area, max_pos_nm)
+
+    if not all_peaks:
+        return []
+
+    positions = np.array([p["peak_position_nm"] for p in all_peaks])
+    widths = np.array([p["peak_width_nm"] for p in all_peaks])
+
+    dist = build_distance_matrix(positions, widths)
+
+    labels = DBSCAN(eps=1.0, min_samples=1, metric="precomputed").fit(dist).labels_
+
+    # group clusters
+    clusters = {}
+    for label, peak, owner in zip(labels, all_peaks, peak_owner):
+        clusters.setdefault(label, []).append((peak, owner))
+
+    results = compute_cluster_stats(clusters, peak_owner, len(entries))
+
+    # final renormalisation
     total_area = sum(r["area_percent"][0] for r in results)
     if total_area > 0:
         for r in results:
-            r["area_percent"][0] = 100 * r["area_percent"][0] / total_area
-            # scale std proportionally
-            r["area_percent"][1] = 100 * r["area_percent"][1] / total_area
+            r["area_percent"][0] *= 100 / total_area
+            r["area_percent"][1] *= 100 / total_area
 
     return results
 
@@ -221,7 +247,7 @@ def average_measurements(input_file):
             [
                 p for p in entry["peaks"]
                 if p["peak_position_nm"] is not None
-                and (p["area_percent"] or 0) > 0
+                and float(p.get("area_percent") or 0) > 0
             ]
             for entry in entries
         ]
@@ -231,7 +257,7 @@ def average_measurements(input_file):
 
         # Sanity check (optional but useful)
         if avg_peaks:
-            total_area = sum(p["area_percent"][0] for p in avg_peaks)
+            total_area = sum(p.get("area_percent")[0] for p in avg_peaks)
             if not np.isclose(total_area, 100, atol=1e-6):
                 print(f"Warning: area sums to {total_area:.2f} for {base}, {temp}")
 
@@ -366,7 +392,9 @@ if __name__ == '__main__':
     read_zetasizer_data("POPC_temp_extrsusion_size.txt", "POPC")
     read_zetasizer_data("surfactant_sizes.txt", "surfactants")
     read_zetasizer_data("surfactant_zetas.txt", "surfactants")
+    read_zetasizer_data('data_from_kate.txt', 'data_from_kate')
 
     process_folder("POPC")
     process_folder("POPC-POPG")
     process_folder("surfactants")
+    process_folder("data_from_kate")

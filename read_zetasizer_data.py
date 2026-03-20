@@ -94,6 +94,8 @@ def read_zetasizer_data(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                 "timestamp": row.get("Measurement Date and Time"),
                 "temperature_C": row.get("T"),
             }
+            if not isinstance(row.get("Type"), str):
+                continue
 
             if row["Type"].strip().lower() == "size":
                 sizes = _parse_array(row.get("Sizes"))

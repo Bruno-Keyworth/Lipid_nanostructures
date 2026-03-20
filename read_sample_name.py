@@ -10,7 +10,7 @@ import re
 
 def read_sample_name(base_name):
 
-    lipid_ratio = {"DMPC":0, "DMPG":0, "POPC":0, "POPG":0, "DPPC":0,}
+    lipid_ratio = {"DMPC":0, "DMPG":0, "POPC":0, "POPG":0, "DPPC":0, "DOPC":0}
     surfactant_concentration = {"C12E6":0, "DDAC":0, "TX100":0}
 
     extrusions = 31
@@ -24,12 +24,12 @@ def read_sample_name(base_name):
         lipid_ratio[l2] = int(n2)
     else:
         # -------- single lipid case --------
-        single_match = re.search(r"\b(DMPC|DMPG|POPC|POPG|DPPC)\b", base_name)
+        single_match = re.search(r"\b(DMPC|DMPG|POPC|POPG|DPPC|DOPC)\b", base_name)
         if single_match:
             lipid_ratio[single_match.group(1)] = 10
 
     # -------- extrusion number --------
-    extr_match = re.search(r"(\d+)\s+Extrusion", base_name)
+    extr_match = re.search(r"(\d+)\s+(Extrusion|EX)", base_name)
     if extr_match:
         extrusions = int(extr_match.group(1))
 
