@@ -1,6 +1,0 @@
-Record	Type	Sample Name	Measurement Date and Time	T	ZP	Mob	Cond
- 		 	 	Â°C	mV	Âµmcm/Vs	mS/cm
-13	Zeta	7 DMPC : 3 DMPG 0.1 mg_ml 1	19 March 2026 11:40:19	50.0	-18.0	-2.036	21.8
-14	Zeta	7 DMPC : 3 DMPG 0.1 mg_ml 2	19 March 2026 11:45:13	50.0	-15.5	-1.761	22.7
-15	Zeta	7 DMPC : 3 DMPG 0.1 mg_ml 3	19 March 2026 11:45:39	50.0	-14.8	-1.678	23.3
-

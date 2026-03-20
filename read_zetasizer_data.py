@@ -21,7 +21,7 @@ def split_zeta_size_file(input_path, output_dir):
 
     Handles multiple blocks and ignores summary sections.
     """
-    output_dir = Path(output_dir)
+    output_dir = DATA_FOLDER / output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     size_lines = []
