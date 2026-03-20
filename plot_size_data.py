@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
 from datetime import datetime
@@ -86,6 +87,9 @@ def extract_peak_diameters(data):
 def extract_sigmas(data):
     return [d["peak_sigma_nm"] for d in data if "peak_sigma_nm" in d and d["peak_sigma_nm"] > 0]
 
+def model(n, D_inf, D0, N):
+    return D_inf + (D0 - D_inf) * np.exp(-n / N)
+
 # ----------------------------
 # Compute stats
 # ----------------------------
@@ -154,7 +158,7 @@ def plot_grouped_bars(ax, stats, control, independent, ylabel):
 # ----------------------------
 # Plot overall trend
 # ----------------------------
-def plot_trend_at_temperature(ax, all_data, control, temperature, extractor, ylabel):
+def plot_trend_at_temperature(ax, all_data, control, temperature, extractor, ylabel, FIT=True):
     means, errors = [], []
 
     for c in control:
@@ -171,7 +175,29 @@ def plot_trend_at_temperature(ax, all_data, control, temperature, extractor, yla
         else:
             means.append(np.nan)
             errors.append(np.nan)
-
+            
+            
+    if FIT:
+        #fitting
+        initial_guess = [100, 300,  15]
+        
+        params, cov = curve_fit(model, control, means, p0=initial_guess,sigma=errors, absolute_sigma=True)
+    
+        D_inf_fit, D0_fit, N_fit = params
+        fit_errs = np.sqrt(np.diag(cov))
+        n_fit = np.linspace(0, max(control), 100)
+        D_fit = model(n_fit, *params)
+            
+        print("Fitting params:\n",
+                  f"D0: {D0_fit:.1f}\n",
+                  f"D_inf: {D_inf_fit:.1f}\n",
+                  f"N: {N_fit:.1f}")
+        residuals = (np.array(means) - model(np.array(control), D_inf_fit, D0_fit, N_fit)) / errors
+        chi2 = np.sum((residuals)**2)
+        dof = len(means) - len(params)
+        print("Reduced chi^2:", chi2/dof,"\n\n")
+            
+        ax.plot(n_fit, D_fit, label="Fit")
     ax.errorbar(
         control,
         means,
