@@ -9,103 +9,116 @@ Created on Tue Feb 24 13:52:29 2026
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
+import pandas as pd
 import numpy as np
+import re
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
-import re
-from datetime import datetime
 
-# ----------------------------
-# Load measurements from JSON
-# ----------------------------
-def load_measurements(folder="POPC"):
+# ============================================================
+# DATA LOADING
+# ============================================================
+
+def load_measurements_by_lipid(folder, lipids_of_interest=None):
     """
-    Load all JSON data from the folder.
-    Extract temperature and extrusion from sample_name.
-    Keep only the latest entry per sample_name.
-    Choose peak with largest area.
+    Walk subfolders named like '30_degrees', read JSONs, and return a dict of DataFrames keyed by lipid.
+    Only the dominant lipid (ratio 10) is extracted.
     """
-    folder_path = DATA_FOLDER / folder
+    lipid_entries = {}
+    
+    folder = DATA_FOLDER / folder
 
-    latest_entries = {}
+    for subfolder in folder.glob("*_degrees"):
+        temp_match = re.match(r"(\d+)_degrees", subfolder.name)
+        if not temp_match:
+            continue
+        temperature = float(temp_match.group(1))
 
-    for file_path in folder_path.glob("*.json"):
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        for file in subfolder.glob("*.json"):
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        for entry in data:
-            sample_name = entry.get("sample_name", "")
-            sample_name = re.sub(r"\bnew_sample\b\s*", "", sample_name)
-            sample_name = re.sub(r"\s+", " ", sample_name).strip()
-            timestamp_str = entry.get("timestamp")
+            if isinstance(data, dict):
+                data = [data]
 
-            if not timestamp_str:
-                continue  # skip if no timestamp
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
 
-            # parse timestamp (adjust format if needed)
-            timestamp = datetime.strptime(timestamp_str, "%d %B %Y %H:%M:%S")
+                base_name = entry.get("base_sample_name")
+                if not base_name:
+                    continue
+                base_name = re.sub(r"\s+", " ", base_name).strip()
+                entry["sample_name"] = base_name
 
-            # keep only latest entry per sample_name
-            if (
-                sample_name not in latest_entries
-                or timestamp > latest_entries[sample_name]["_parsed_timestamp"]
-            ):
-                entry["_parsed_timestamp"] = timestamp
-                latest_entries[sample_name] = entry
+                entry["extrusion"] = entry.get("extrusions", 0)
+                entry["temperature_C"] = entry.get("temperature_C", temperature)
 
-    # now process only deduplicated entries
-    entries = []
+                lipid_ratio = entry.get("lipid_ratio", {})
+                dominant_lipids = [L for L, v in lipid_ratio.items() if v == 10]
+                if not dominant_lipids:
+                    continue
+                dominant_lipid = dominant_lipids[0]
+                if lipids_of_interest and dominant_lipid not in lipids_of_interest:
+                    continue
+                entry["lipid"] = dominant_lipid
 
-    for entry in latest_entries.values():
-        sample_name = entry.get("sample_name", "")
+                averaged_peaks = entry.get("averaged_peaks", [])
+                if averaged_peaks:
+                    first_peak = averaged_peaks[0]
+                    entry["peak_size_nm"] = first_peak.get("peak_position_nm", [0])[0]  # take mean value
+                    entry["peak_sigma_nm"] = first_peak.get("peak_width_nm", [0])[0]
+                    entry["peak_area_percent"] = first_peak.get("area_percent", [0])[0]
+                else:
+                    entry["peak_size_nm"] = 0
+                    entry["peak_sigma_nm"] = 0
+                    entry["peak_area_percent"] = 0
 
-        # Extract extrusion
-        extrusion_match = re.search(r"(\d+)\s+Extrusion", sample_name)
-        entry["extrusion"] = int(extrusion_match.group(1)) if extrusion_match else 0
+                entry["folder_temperature"] = temperature
 
-        # Extract temperature
-        temp_match = re.search(r"(\d+)\s+degrees", sample_name)
-        entry["temperature_C"] = float(temp_match.group(1)) if temp_match else 0
+                if dominant_lipid not in lipid_entries:
+                    lipid_entries[dominant_lipid] = []
+                lipid_entries[dominant_lipid].append(entry)
 
-        # pick peak with largest area
-        if entry.get("peaks"):
-            peak = max(entry["peaks"], key=lambda x: float(x.get("area_percent") or 0))
-            entry["peak_size_nm"] = float(peak.get("peak_position_nm") or 0)
-            entry["peak_sigma_nm"] = float(peak.get("peak_width_nm") or 0)
+    # convert to DataFrames
+    for lipid in lipid_entries:
+        lipid_entries[lipid] = pd.DataFrame(lipid_entries[lipid])
 
-        entries.append(entry)
+    return lipid_entries
 
-    return entries
+# ============================================================
+# DATA EXTRACTORS
+# ============================================================
 
-# ----------------------------
-# Extractors
-# ----------------------------
 def extract_peak_diameters(data):
-    return [d["peak_size_nm"] for d in data if "peak_size_nm" in d and d["peak_size_nm"] > 0]
+    return [d["peak_size_nm"] for d in data if d.get("peak_size_nm", 0) > 0]
 
 def extract_sigmas(data):
-    return [d["peak_sigma_nm"] for d in data if "peak_sigma_nm" in d and d["peak_sigma_nm"] > 0]
+    return [d["peak_sigma_nm"] for d in data if d.get("peak_sigma_nm", 0) > 0]
 
 def model(n, D_inf, D0, N):
     return D_inf + (D0 - D_inf) * np.exp(-n / N)
 
-# ----------------------------
-# Compute stats
-# ----------------------------
-def compute_group_stats(all_data, control, independent, extractor):
-    stats = {}
+# ============================================================
+# MULTIPLE LIPIDS PLOTTING
+# ============================================================
 
-    for c in control:
+def plot_trend_multi_lipid(ax, lipid_dfs, lipids, extractor, ylabel, FIT=True):
+    for lipid in lipids:
+        df = lipid_dfs.get(lipid)
+        if df is None or df.empty:
+            print(f"Warning: no data found for {lipid}")
+            continue
+
+        # auto-detect extrusion numbers
+        extrusions_lipid = sorted(df["extrusion"].unique())
         means, errors = [], []
 
-        for i in independent:
-            data = [
-                d for d in all_data
-                if d["temperature_C"] == i and d["extrusion"] == c
-            ]
-            values = extractor(data)
-
+        for c in extrusions_lipid:
+            subset = df[df["extrusion"] == c].to_dict("records")
+            values = extractor(subset)
             if len(values) >= 2:
                 means.append(np.mean(values))
                 errors.append(np.std(values, ddof=1))
@@ -113,144 +126,68 @@ def compute_group_stats(all_data, control, independent, extractor):
                 means.append(np.nan)
                 errors.append(np.nan)
 
-        stats[c] = {
-            "means": means,
-            "errors": errors,
-            "overall_mean": np.nanmean(means),
-            "overall_std": np.nanstd(means),
-        }
+        # fit
+        if FIT:
+            initial_guess = [100, 300, 15]
+            try:
+                params, cov = curve_fit(
+                    model,
+                    extrusions_lipid,
+                    means,
+                    p0=initial_guess,
+                    sigma=errors,
+                    absolute_sigma=True
+                )
+                n_fit = np.linspace(min(extrusions_lipid), max(extrusions_lipid), 200)
+                ax.plot(n_fit, model(n_fit, *params), label=f"{lipid} fit")
+            except Exception as e:
+                print(f"Fit failed for {lipid}: {e}")
 
-    return stats
-
-
-# ----------------------------
-# Plot grouped bars
-# ----------------------------
-def plot_grouped_bars(ax, stats, control, independent, ylabel):
-    x = np.arange(len(independent))
-    bar_width = 0.8 / len(control)
-
-    for idx, c in enumerate(control):
-        means = stats[c]["means"]
-        errors = stats[c]["errors"]
-
-        offset = (idx - (len(control) - 1) / 2) * bar_width
-
-        ax.bar(
-            x + offset,
+        ax.errorbar(
+            extrusions_lipid,
             means,
-            bar_width,
             yerr=errors,
-            capsize=4,
-            edgecolor="black",
-            linewidth=0.6,
-            label=f"{c} Extrusions",
+            fmt='o-',
+            capsize=5,
+            label=lipid
         )
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(independent)
-    ax.set_xlabel("Temperature [°C]")
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    ax.grid(linestyle="--", alpha=0.3)
-
-
-# ----------------------------
-# Plot overall trend
-# ----------------------------
-def plot_trend_at_temperature(ax, all_data, control, temperature, extractor, ylabel, FIT=True):
-    means, errors = [], []
-
-    for c in control:
-        data = [
-            d for d in all_data
-            if d["temperature_C"] == temperature and d["extrusion"] == c
-        ]
-
-        values = extractor(data)
-
-        if len(values) >= 2:
-            means.append(np.mean(values))
-            errors.append(np.std(values, ddof=1))
-        else:
-            means.append(np.nan)
-            errors.append(np.nan)
-            
-            
-    if FIT:
-        #fitting
-        initial_guess = [100, 300,  15]
-        
-        params, cov = curve_fit(model, control, means, p0=initial_guess,sigma=errors, absolute_sigma=True)
-    
-        D_inf_fit, D0_fit, N_fit = params
-        fit_errs = np.sqrt(np.diag(cov))
-        n_fit = np.linspace(0, max(control), 100)
-        D_fit = model(n_fit, *params)
-            
-        print("Fitting params:\n",
-                  f"D0: {D0_fit:.1f}\n",
-                  f"D_inf: {D_inf_fit:.1f}\n",
-                  f"N: {N_fit:.1f}")
-        residuals = (np.array(means) - model(np.array(control), D_inf_fit, D0_fit, N_fit)) / errors
-        chi2 = np.sum((residuals)**2)
-        dof = len(means) - len(params)
-        print("Reduced chi^2:", chi2/dof,"\n\n")
-            
-        ax.plot(n_fit, D_fit, label="Fit")
-    ax.errorbar(
-        control,
-        means,
-        yerr=errors,
-        fmt='o-',
-        linewidth=2,
-        markersize=6,
-        capsize=5,
-    )
-
     ax.set_xlabel("Number of Extrusions")
-    ax.set_ylabel(f"{ylabel} (at {temperature}°C)")
+    ax.set_ylabel(ylabel)
     ax.grid(linestyle="--", alpha=0.3)
 
-
-def grouped_bar_plot(control, independent, extractor, ylabel, filename, folder="POPC"):
-    all_data = load_measurements(folder)
-
-    stats = compute_group_stats(all_data, control, independent, extractor)
-
-    # --- grouped bars ---
-    fig, ax = plt.subplots(figsize=(10, 6))
-    plot_grouped_bars(ax, stats, control, independent, ylabel)
-
-    plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"{filename}_Temp_plot.png", dpi=300)
-    plt.show()
+def multi_lipid_plot(lipids, extractor, ylabel, filename, folder=DATA_FOLDER):
+    lipid_dfs = load_measurements_by_lipid(folder, lipids_of_interest=lipids)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    plot_trend_at_temperature(ax, all_data, control, 30, extractor, ylabel)
-    
+    plot_trend_multi_lipid(ax, lipid_dfs, lipids, extractor, ylabel)
+    ax.legend()
+
     plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"{filename}_extrusion_30C.png", dpi=300)
+    plt.savefig(PLOTS_FOLDER / f"{filename}_multi_lipid.png", dpi=300)
     plt.show()
+
+# ============================================================
+# RUN
+# ============================================================
 
 if __name__ == "__main__":
-    extrusions = [3, 5, 10, 15, 20, 31, 41, 51, 61]
-    temperatures = [10, 20, 30, 40, 50, 60]
+    plt.close('all')
 
-    grouped_bar_plot(
-        extrusions,
-        temperatures,
+    lipids = ["POPC", "DMPC"]
+
+    multi_lipid_plot(
+        lipids,
         extractor=extract_peak_diameters,
         ylabel="Peak Diameter (nm)",
         filename="Diameter",
         folder="POPC"
     )
 
-    grouped_bar_plot(
-        extrusions,
-        temperatures,
+    multi_lipid_plot(
+        lipids,
         extractor=extract_sigmas,
         ylabel="Peak Width (nm)",
         filename="Sigma",
-        folder="POPC"
+        folder= "POPC"
     )
