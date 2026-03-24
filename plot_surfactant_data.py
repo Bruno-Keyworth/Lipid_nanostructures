@@ -226,32 +226,25 @@ def plot_zeta_against_concentration(df, surfactants):
     # Identify control (no surfactant added)
     control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
 
-    if control.empty:
-        raise RuntimeError("Control data is missing.")
-
-    control_zeta = control["zeta"].mean()
-    control_err = control["zeta_err"].mean()
-
     fig, ax = plt.subplots()
 
-    # Plot dotted black control line
-    ax.axhline(
-        control_zeta,
-        color="black",
-        linestyle=":",
-        linewidth=1.2,
-        label="Control"
-    )
-    # Optional: shade ± error
-    ax.fill_between(
-        [0, max(df[surfactants].max())],
-        control_zeta - control_err,
-        control_zeta + control_err,
-        color="black",
-        alpha=0.1
-    )
-
-    # Plot each surfactant series
+    if not control.empty:
+        control_zeta = control["zeta"].mean()
+        control_err = control["zeta_err"].mean()
+        ax.axhline(
+            control_zeta,
+            color="black",
+            linestyle=":",
+            linewidth=1.2,
+            label="Control"
+        )
+        ax.fill_between(
+            [0, max(df[surfactants].max())],
+            control_zeta - control_err,
+            control_zeta + control_err,
+            color="black",
+            alpha=0.1
+        )
     for surf in surfactants:
         sub = df[df[surf] > 0].sort_values(surf)
         if sub.empty:
@@ -358,9 +351,9 @@ def plot_zeta_against_fraction(df, conditions):
 if __name__ == "__main__":
     plt.close('all')
 
-    # folder = DATA_FOLDER / "surfactants" / "50_degrees"
-    # df = gather_data(folder)
-    # create_fraction_plots(df)
+    folder = DATA_FOLDER / "surfactants" / "50_degrees"
+    df = gather_data(folder)
+    create_fraction_plots(df)
     
     folder = DATA_FOLDER / "surfactants" / "25_degrees"
     df = gather_data(folder)
