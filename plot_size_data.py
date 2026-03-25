@@ -127,7 +127,7 @@ def generate_comparison(extrusions_list, key, ylabel, filename):
     plt.show()
 
 if __name__ == "__main__":
-    extrusions = [3, 5, 10, 15, 20, 31, 41, 51, 61]
+    extrusions = [3, 5, 10, 11, 15, 20, 21, 31, 41, 51, 61]
     
     # 1. Diameter Plot
     generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
