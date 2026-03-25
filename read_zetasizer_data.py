@@ -152,33 +152,42 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
     out_dir = DATA_FOLDER / save_to_folder
     os.makedirs(out_dir, exist_ok=True)
 
+    df["Record"] = pd.to_numeric(df["Record"], errors='coerce')
+
     # Group by base sample name
     df["Base Sample Name"] = df["Sample Name"].apply(base_sample_name)
     grouped = df.groupby("Base Sample Name")
 
     for base_name, group in grouped:
-
         file_path = out_dir / (_safe_filename(base_name) + ".json")
-        data = []
-        existing_timestamps = set()
+        
+        # We'll use a dict keyed by timestamp to track the highest Record
+        # format: { "timestamp_string": (record_int, entry_dict) }
+        timestamp_map = {}
 
-        # Load existing data if present
+        # Load existing data to populate the map
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                existing_timestamps = {
-                    entry.get("timestamp") for entry in data if entry.get("timestamp") is not None
-                }
+                existing_data = json.load(f)
+                for entry in existing_data:
+                    ts = entry.get("timestamp")
+                    rec = entry.get("record_number", 0)
+                    timestamp_map[ts] = (rec, entry)
 
         for _, row in group.iterrows():
             timestamp = row.get("Measurement Date and Time")
+            record_num = int(row.get("Record", 0))
 
-            # Skip duplicates
-            if timestamp in existing_timestamps:
-                continue
+            # TIE-BREAKER LOGIC: 
+            # If timestamp exists, only replace if this record number is higher
+            if timestamp in timestamp_map:
+                if record_num <= timestamp_map[timestamp][0]:
+                    continue 
 
+            # Build the entry
             entry = {
                 "sample_name": row["Sample Name"],
+                "record_number": record_num, # Store this to compare in future runs
                 "timestamp": timestamp,
                 "temperature_C": row.get("T"),
             }
@@ -223,12 +232,15 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                 print(f"Cannot read measurement type: {row['Type']}")
                 continue
 
-            existing_timestamps.add(timestamp)
-            data.append(entry)
+            # Save to our map
+            timestamp_map[timestamp] = (record_num, entry)
+
+        # Convert map back to list of entries
+        final_data = [val[1] for val in timestamp_map.values()]
 
         # Write merged JSON back
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(final_data, f, indent=2)
             
 def read_zetasizer_data(file, output_folder):
     """
