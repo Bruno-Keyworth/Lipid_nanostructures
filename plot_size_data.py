@@ -7,199 +7,130 @@ Created on Tue Feb 24 13:52:29 2026
 """
 import json
 from pathlib import Path
-import pandas as pd
 import numpy as np
-import re
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
+import re
 
-def load_measurements_by_lipid(folder, lipids_temperatures={'POPC': 30, 'DMPC': 50}):
+def load_measurements(parent_folder="POPC"):
     """
-    Walk subfolders like '30_degrees', load JSONs, extract:
-        - extrusion number
-        - temperature
-        - dominant lipid (ratio 10)
-        - largest-area averaged peak
-    Return dict: lipid → DataFrame
+    Recursively loads JSON files from parent_folder.
+    Filters for pure POPC (10) or pure DMPC (10) using lipid_ratio.
     """
+    folder_path = DATA_FOLDER / parent_folder
+    processed_entries = []
 
-    folder = DATA_FOLDER / folder
-    lipid_entries = {}
-
-    for subfolder in folder.glob("*_degrees"):
-        temp_match = re.match(r"(\d+)_degrees", subfolder.name)
-        if not temp_match:
-            continue
-
-        folder_temp = float(temp_match.group(1))
-
-        for json_file in subfolder.glob("*.json"):
-            with open(json_file, "r", encoding="utf-8") as f:
+    # Walk through all subfolders (30_degrees, 50_degrees, etc.)
+    for file_path in folder_path.rglob("*.json"):
+        with open(file_path, "r", encoding="utf-8") as f:
+            try:
                 data = json.load(f)
+                # If the JSON is a list, take the first element; if a dict, use as is
+                entries = data if isinstance(data, list) else [data]
+            except json.JSONDecodeError:
+                continue
 
-            # Standardise to list
-            if isinstance(data, dict):
-                data = [data]
+        for entry in entries:
+            ratios = entry.get("lipid_ratio", {})
+            
+            # Determine Lipid Type based on ratio of 10
+            lipid_type = None
+            if ratios.get("POPC") == 10:
+                lipid_type = "POPC"
+            elif ratios.get("DMPC") == 10:
+                lipid_type = "DMPC"
+            
+            # Skip if it's not one of our target pure lipids
+            if not lipid_type:
+                continue
 
-            for entry in data:
-                if not isinstance(entry, dict):
-                    continue
+            # Extract Metadata
+            temp = entry.get("temperature_C", 0)
+            extrusions = entry.get("extrusions", 0)
 
-                # --- extraction of basic fields ---
-                base_name = entry.get("base_sample_name", "")
-                base_name = re.sub(r"\s+", " ", base_name).strip()
-                entry["sample_name"] = base_name
+            # Extract Peaks from repeat_peaks (flattening the list of lists)
+            all_repeats = [p for sublist in entry.get("repeat_peaks", []) for p in sublist]
+            
+            if all_repeats:
+                # Pick the peak with the largest area percent across all repeats
+                best_peak = max(all_repeats, key=lambda x: x.get("area_percent", 0))
+                
+                processed_entries.append({
+                    "lipid": lipid_type,
+                    "temperature_C": float(temp),
+                    "extrusions": int(extrusions),
+                    "peak_size_nm": float(best_peak.get("peak_position_nm", 0)),
+                    "peak_sigma_nm": float(best_peak.get("peak_width_nm", 0))
+                })
 
-                entry["extrusion"] = int(entry.get("extrusions", 0))
-                entry["temperature_C"] = float(entry.get("temperature_C", folder_temp))
-
-                # --- identify dominant lipid ---
-                lipid_ratio = entry.get("lipid_ratio", {})
-                dominant_candidates = [L for L, v in lipid_ratio.items() if v == 10]
-                if not dominant_candidates:
-                    continue
-
-                dominant_lipid = dominant_candidates[0]
-
-                # temperature filter per lipid
-                if dominant_lipid in lipids_temperatures:
-                    required_temp = lipids_temperatures[dominant_lipid]
-                    if int(entry["temperature_C"]) != required_temp:
-                        continue
-                else:
-                    continue
-
-                entry["lipid"] = dominant_lipid
-
-                # --- pick largest-area averaged peak (old script behaviour) ---
-                averaged_peaks = entry.get("averaged_peaks", [])
-                if averaged_peaks:
-                    peak = max(averaged_peaks, key=lambda p: p["area_percent"][0])
-                    entry["peak_size_nm"] = float(peak["peak_position_nm"][0])
-                    entry["peak_sigma_nm"] = float(peak["peak_width_nm"][0])
-                    entry["peak_area_percent"] = float(peak["area_percent"][0])
-                else:
-                    entry["peak_size_nm"] = np.nan
-                    entry["peak_sigma_nm"] = np.nan
-                    entry["peak_area_percent"] = np.nan
-
-                # --- accumulate ---
-                if dominant_lipid not in lipid_entries:
-                    lipid_entries[dominant_lipid] = []
-
-                lipid_entries[dominant_lipid].append(entry)
-
-    # convert lists → DataFrames
-    for lipid in lipid_entries:
-        lipid_entries[lipid] = pd.DataFrame(lipid_entries[lipid])
-
-    return lipid_entries
-
-# ============================================================
-# DATA EXTRACTORS
-# ============================================================
-
-def extract_peak_diameters(records):
-    return [d["peak_size_nm"] for d in records if not pd.isna(d["peak_size_nm"])]
-
-def extract_sigmas(records):
-    return [d["peak_sigma_nm"] for d in records if not pd.isna(d["peak_sigma_nm"])]
+    return processed_entries
 
 def model(n, D_inf, D0, N):
     return D_inf + (D0 - D_inf) * np.exp(-n / N)
 
-# ============================================================
-# MULTI-LIPID TREND PLOTTING
-# ============================================================
+def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
+    """Filters data for a series and adds points + fit to the plot."""
+    means, errors = [], []
+    
+    subset = [d for d in data if d["lipid"] == lipid and d["temperature_C"] == target_temp]
 
-def plot_trend_multi_lipid(ax, lipid_dfs, lipids, extractor, ylabel, FIT=True):
-    for lipid in lipids:
-        df = lipid_dfs.get(lipid)
-        if df is None or df.empty:
-            print(f"Warning: no data for {lipid}")
-            continue
+    for e in extrusions_list:
+        # Find all measurements for this specific extrusion count
+        vals = [d[key] for d in subset if d["extrusions"] == e and d[key] > 0]
+        
+        if len(vals) >= 1:
+            means.append(np.mean(vals))
+            # If only 1 measurement, use 5% of mean as a placeholder error for fitting
+            errors.append(np.std(vals, ddof=1) if len(vals) > 1 else np.mean(vals) * 0.05)
+        else:
+            means.append(np.nan)
+            errors.append(np.nan)
 
-        extrusions = sorted(df["extrusion"].unique())
-        means, errors = [], []
+    means, errors = np.array(means), np.array(errors)
+    x_data = np.array(extrusions_list)
+    mask = ~np.isnan(means)
+    
+    if np.any(mask):
+        # Plot data points
+        ax.errorbar(x_data[mask], means[mask], yerr=errors[mask], fmt='o', 
+                    color=color, label=f"{lipid} ({target_temp}°C)", capsize=4)
+        
+        # Perform Fit
+        try:
+            popt, _ = curve_fit(model, x_data[mask], means[mask], 
+                               p0=[min(means[mask]), max(means[mask]), 15], 
+                               sigma=errors[mask], absolute_sigma=True)
+            
+            x_fit = np.linspace(min(extrusions_list), max(extrusions_list), 100)
+            ax.plot(x_fit, model(x_fit, *popt), '--', color=color, alpha=0.7)
+        except Exception as e:
+            print(f"Fit failed for {lipid} {target_temp}C: {e}")
 
-        for n in extrusions:
-            subset = df[df["extrusion"] == n].to_dict("records")
-            values = extractor(subset)
-
-            if len(values) >= 1:
-                means.append(np.mean(values))
-                if len(values) > 1:
-                    errors.append(np.std(values, ddof=1))
-                else:
-                    errors.append(0)
-            else:
-                means.append(np.nan)
-                errors.append(np.nan)
-
-        # fit
-        if FIT:
-            try:
-                params, cov = curve_fit(
-                    model,
-                    extrusions,
-                    means,
-                    p0=[100, 300, 15],
-                    sigma=[e if e > 0 else 1 for e in errors],
-                    absolute_sigma=True,
-                    maxfev=10000
-                )
-                n_fit = np.linspace(min(extrusions), max(extrusions), 300)
-                ax.plot(n_fit, model(n_fit, *params), label=f"{lipid} fit")
-            except Exception as e:
-                print(f"Fit failed for {lipid}: {e}")
-
-        ax.errorbar(
-            extrusions,
-            means,
-            yerr=errors,
-            fmt='o-',
-            capsize=5,
-            label=lipid
-        )
+def generate_comparison(extrusions_list, key, ylabel, filename):
+    all_data = load_measurements("POPC")
+    
+    fig, ax = plt.subplots(figsize=(9, 6))
+    
+    # Target: POPC at 30 degrees and DMPC at 50 degrees
+    add_series(ax, all_data, "POPC", 30.0, extrusions_list, key, "royalblue")
+    add_series(ax, all_data, "DMPC", 50.0, extrusions_list, key, "firebrick")
 
     ax.set_xlabel("Number of Extrusions")
     ax.set_ylabel(ylabel)
-    ax.grid(linestyle="--", alpha=0.3)
-
-# ============================================================
-# WRAPPER
-# ============================================================
-
-def multi_lipid_plot(extractor, ylabel, filename, folder):
-    lipid_dfs = load_measurements_by_lipid(folder)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    plot_trend_multi_lipid(ax, lipid_dfs, ['POPC', 'DMPC'], extractor, ylabel)
+    ax.set_title(f"Comparison of POPC (30°C) and DMPC (50°C)")
     ax.legend()
-
+    ax.grid(True, linestyle="--", alpha=0.4)
+    
     plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"{filename}_multi_lipid.png", dpi=300)
+    plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
     plt.show()
 
-# ============================================================
-# RUN
-# ============================================================
-
 if __name__ == "__main__":
-    plt.close('all')
-
-    multi_lipid_plot(
-        extractor=extract_peak_diameters,
-        ylabel="Peak Diameter (nm)",
-        filename="Diameter",
-        folder="POPC"
-    )
-
-    multi_lipid_plot(
-        extractor=extract_sigmas,
-        ylabel="Peak Width (nm)",
-        filename="Sigma",
-        folder="POPC"
-    )
+    extrusions = [3, 5, 10, 15, 20, 31, 41, 51, 61]
+    
+    # 1. Diameter Plot
+    generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
+    
+    # 2. Width (Sigma) Plot
+    generate_comparison(extrusions, "peak_sigma_nm", "Peak Width (nm)", "Width")
