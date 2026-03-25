@@ -157,6 +157,21 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
     # Group by base sample name
     df["Base Sample Name"] = df["Sample Name"].apply(base_sample_name)
     grouped = df.groupby("Base Sample Name")
+    for base_name, group in grouped:
+        # --- NEW FOLDER LOGIC ---
+        # Check if any row in this group contains "aging"
+        is_aging = group["Sample Name"].str.contains("aging", case=False).any()
+        
+        # If aging, put it in a subfolder
+        if is_aging:
+            out_dir = DATA_FOLDER / save_to_folder / "aging"
+        else:
+            out_dir = DATA_FOLDER / save_to_folder
+            
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # ------------------------
+
+        file_path = out_dir / (_safe_filename(base_name) + ".json")
 
     for base_name, group in grouped:
         file_path = out_dir / (_safe_filename(base_name) + ".json")
