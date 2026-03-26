@@ -118,14 +118,12 @@ def base_sample_name(name):
 
 def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
     """
-    Reads a Zetasizer CSV (size, zeta, or combined) and saves/merges JSON per sample.
-
-    Preserves original functionality:
-        - Uses DATA_FOLDER
-        - Uses base_sample_name
-        - Uses _safe_filename
-        - Skips duplicates
-        - Parses size peaks, zeta, etc.
+    Reads a Zetasizer CSV and saves/merges JSON per sample.
+    
+    Updated Logic: 
+    - Always saves to the root of save_to_folder (no 'aging' subfolder).
+    - If save_to_folder != 'aging', skips any sample entries containing 'aging'.
+    - Filters by highest record per timestamp.
     """
 
     # Load CSV from DATA_FOLDER
@@ -141,43 +139,23 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
     # Remove empty rows or repeated headers
     df = df[df["Sample Name"].notna()]
     df = df[df["Sample Name"] != "Sample Name"]
-
-    # Skip rows without a valid Type
     df = df[df["Type"].notna()]
-
-    # Normalise type to lowercase
     df["Type"] = df["Type"].str.strip().str.lower()
-
-    # Ensure output directory exists
-    out_dir = DATA_FOLDER / save_to_folder
-    os.makedirs(out_dir, exist_ok=True)
-
     df["Record"] = pd.to_numeric(df["Record"], errors='coerce')
 
     # Group by base sample name
     df["Base Sample Name"] = df["Sample Name"].apply(base_sample_name)
     grouped = df.groupby("Base Sample Name")
-    for base_name, group in grouped:
-        # --- NEW FOLDER LOGIC ---
-        # Check if any row in this group contains "aging"
-        is_aging = group["Sample Name"].str.contains("aging", case=False).any()
-        
-        # If aging, put it in a subfolder
-        if is_aging:
-            out_dir = DATA_FOLDER / save_to_folder / "aging"
-        else:
-            out_dir = DATA_FOLDER / save_to_folder
-            
-        out_dir.mkdir(parents=True, exist_ok=True)
-        # ------------------------
 
-        file_path = out_dir / (_safe_filename(base_name) + ".json")
+    # Set the output directory once - no subfolders
+    out_dir = DATA_FOLDER / save_to_folder
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     for base_name, group in grouped:
+        # Define file path directly in the main out_dir
         file_path = out_dir / (_safe_filename(base_name) + ".json")
-        
-        # We'll use a dict keyed by timestamp to track the highest Record
-        # format: { "timestamp_string": (record_int, entry_dict) }
+
+        # Track the highest Record per timestamp
         timestamp_map = {}
 
         # Load existing data to populate the map
@@ -192,17 +170,24 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
         for _, row in group.iterrows():
             timestamp = row.get("Measurement Date and Time")
             record_num = int(row.get("Record", 0))
+            sample_name = row["Sample Name"]
 
-            # TIE-BREAKER LOGIC: 
-            # If timestamp exists, only replace if this record number is higher
+            # 1. TIE-BREAKER LOGIC: 
+            # Reject if record number isn't newer/higher for this timestamp
             if timestamp in timestamp_map:
                 if record_num <= timestamp_map[timestamp][0]:
                     continue 
 
+            # 2. AGING FILTER LOGIC:
+            # If the folder is NOT 'aging', skip any individual row with 'aging' in the name
+            if save_to_folder.lower() != "aging":
+                if "aging" in sample_name.lower():
+                    continue
+
             # Build the entry
             entry = {
-                "sample_name": row["Sample Name"],
-                "record_number": record_num, # Store this to compare in future runs
+                "sample_name": sample_name,
+                "record_number": record_num,
                 "timestamp": timestamp,
                 "temperature_C": row.get("T"),
             }
@@ -213,49 +198,32 @@ def read_zetasizer_file(csv_path, save_to_folder, encoding="latin1", sep="\t"):
                 entry.update({
                     "type": "size",
                     "peaks": [
-                        {
-                            "peak_position_nm": row.get("Pk 1 Mean Int"),
-                            "area_percent": row.get("Pk 1 Area Int"),
-                            "peak_width_nm": row.get("Size Peak")
-                        },
-                        {
-                            "peak_position_nm": row.get("Pk 2 Mean Int"),
-                            "area_percent": row.get("Pk 2 Area Int"),
-                            "peak_width_nm": row.get("Size Peak.1")
-                        },
-                        {
-                            "peak_position_nm": row.get("Pk 3 Mean Int"),
-                            "area_percent": row.get("Pk 3 Area Int"),
-                            "peak_width_nm": row.get("Size Peak.2")
-                        },
+                        {"peak_position_nm": row.get("Pk 1 Mean Int"), "area_percent": row.get("Pk 1 Area Int"), "peak_width_nm": row.get("Size Peak")},
+                        {"peak_position_nm": row.get("Pk 2 Mean Int"), "area_percent": row.get("Pk 2 Area Int"), "peak_width_nm": row.get("Size Peak.1")},
+                        {"peak_position_nm": row.get("Pk 3 Mean Int"), "area_percent": row.get("Pk 3 Area Int"), "peak_width_nm": row.get("Size Peak.2")},
                     ],
-                    "sizes_nm": sizes.tolist(),
-                    "intensities_percent": intensities.tolist(),
+                    "sizes_nm": sizes.tolist() if sizes is not None else [],
+                    "intensities_percent": intensities.tolist() if intensities is not None else [],
                     "z_average_nm": row.get("Z-Ave"),
                     "pdi": row.get("PdI")
                 })
-
             elif row["Type"] == "zeta":
                 entry.update({
                     "type": "zeta",
-                    "zeta_mV": float(row.get("ZP")),
-                    "mobility_umcm_Vs": float(row.get("Mob")),
-                    "conductivity_mScm": float(row.get("Cond"))
+                    "zeta_mV": float(row.get("ZP", 0)),
+                    "mobility_umcm_Vs": float(row.get("Mob", 0)),
+                    "conductivity_mScm": float(row.get("Cond", 0))
                 })
-
             else:
-                print(f"Cannot read measurement type: {row['Type']}")
                 continue
 
-            # Save to our map
             timestamp_map[timestamp] = (record_num, entry)
 
-        # Convert map back to list of entries
-        final_data = [val[1] for val in timestamp_map.values()]
-
-        # Write merged JSON back
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(final_data, f, indent=2)
+        # Convert map back to list of entries and save
+        if timestamp_map:
+            final_data = [val[1] for val in timestamp_map.values()]
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(final_data, f, indent=2)
             
 def read_zetasizer_data(file, output_folder):
     """

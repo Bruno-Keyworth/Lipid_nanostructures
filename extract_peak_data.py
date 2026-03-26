@@ -384,18 +384,20 @@ def process_folder(folder):
     for file in folder.glob("*.json"):
         average_measurements(file)
 
-
 if __name__ == '__main__':
 
     read_zetasizer_data("POPC_POPG_fraction_sizes.txt", "POPC-POPG")
     read_zetasizer_data("POPC_POPG_zetas.txt", "POPC-POPG")
-    read_zetasizer_data("POPC_temp_extrsusion_size.txt", "POPC")
+    read_zetasizer_data("POPC_temp_extrsusion_size.txt", "extrusions")
     read_zetasizer_data("surfactant_sizes.txt", "surfactants")
     read_zetasizer_data("surfactant_zetas.txt", "surfactants")
     read_zetasizer_data('data_from_kate.txt', 'data_from_kate')
-    read_zetasizer_data('time_since_extrusion.txt', 'POPC')
+    read_zetasizer_data('time_since_extrusion.txt', 'aging')
+    read_zetasizer_data('extrusion_number.txt', 'extrusions')
+    
 
-    process_folder("POPC")
+    process_folder("extrusions")
     process_folder("POPC-POPG")
+    process_folder("aging")
     process_folder("surfactants")
     process_folder("data_from_kate")
