@@ -13,7 +13,7 @@ from scipy.optimize import curve_fit
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
 
-def load_measurements(parent_folder="POPC"):
+def load_measurements(parent_folder="extrusions"):
     """
     Recursively loads JSON files from parent_folder.
     Filters for pure POPC (10) or pure DMPC (10) using lipid_ratio.
@@ -108,7 +108,7 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
             print(f"Fit failed for {lipid} {target_temp}C: {e}")
 
 def generate_comparison(extrusions_list, key, ylabel, filename):
-    all_data = load_measurements("POPC")
+    all_data = load_measurements("extrusions")
     
     fig, ax = plt.subplots(figsize=(9, 6))
     
@@ -127,7 +127,7 @@ def generate_comparison(extrusions_list, key, ylabel, filename):
     plt.show()
 
 if __name__ == "__main__":
-    extrusions = [3, 5, 10, 11, 15, 20, 31, 41, 51, 61]
+    extrusions = [3, 5, 10, 11, 15, 20, 21,  31, 41, 51, 61]
     
     # 1. Diameter Plot
     generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
