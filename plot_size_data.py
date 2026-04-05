@@ -125,6 +125,32 @@ def generate_comparison(extrusions_list, key, ylabel, filename):
     plt.tight_layout()
     plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
     plt.show()
+    
+def generate_double_figure(extrusions_list, key1, key2, filename):
+    all_data = load_measurements("extrusions")
+    
+    fig, (ax1,ax2) = plt.subplots(1,2,figsize=(12, 5))
+    
+    # Target: POPC at 30 degrees and DMPC at 50 degrees
+    add_series(ax1, all_data, "POPC", 30.0, extrusions_list, key1, "royalblue")
+    add_series(ax1, all_data, "DMPC", 50.0, extrusions_list, key1, "firebrick")
+    
+    add_series(ax2, all_data, "POPC", 30.0, extrusions_list, key2, "royalblue")
+    add_series(ax2, all_data, "DMPC", 50.0, extrusions_list, key2, "firebrick")
+
+    ax1.set_xlabel("Number of Extrusions")
+    ax2.set_xlabel("Number of Extrusions")
+    ax1.set_ylabel("Peak Diameter, [nm]")
+    ax2.set_ylabel("Peak Width, [nm]")
+    fig.suptitle("Comparison of POPC (30°C) and DMPC (50°C)")
+    ax1.legend()
+    ax2.legend()
+    ax1.grid(True, linestyle="--", alpha=0.4)
+    ax2.grid(True, linestyle="--", alpha=0.4)
+    
+    plt.tight_layout()
+    plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
+    plt.show()
 
 if __name__ == "__main__":
     extrusions = [3, 5, 10, 11, 15, 20, 21,  31, 41, 51, 61]
@@ -134,3 +160,5 @@ if __name__ == "__main__":
     
     # 2. Width (Sigma) Plot
     generate_comparison(extrusions, "peak_sigma_nm", "Peak Width (nm)", "Width")
+    
+    generate_double_figure(extrusions, "peak_size_nm", "peak_sigma_nm" ,  "both")
