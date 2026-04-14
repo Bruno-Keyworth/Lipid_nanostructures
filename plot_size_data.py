@@ -76,20 +76,31 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
     subset = [d for d in data if d["lipid"] == lipid and d["temperature_C"] == target_temp]
 
     for e in extrusions_list:
-        # Find all measurements for this specific extrusion count
-        vals = [d[key] for d in subset if d["extrusions"] == e and d[key] > 0]
+        # Collect valid values
+        vals = [
+            d[key] for d in subset
+            if d["extrusions"] == e and np.isfinite(d[key]) and d[key] > 0
+        ]
         
-        if len(vals) >= 1:
-            means.append(np.mean(vals))
-            # If only 1 measurement, use 5% of mean as a placeholder error for fitting
-            errors.append(np.std(vals, ddof=1) if len(vals) > 1 else np.mean(vals) * 0.05)
+        if len(vals) > 1:
+            mean = np.mean(vals)
+            std = np.std(vals, ddof=1)
+            err = max(std, 0.05 * mean)
+            
+        elif len(vals) == 1:
+            mean = vals[0]
+            err = 0.05 * mean
+            
         else:
-            means.append(np.nan)
-            errors.append(np.nan)
+            mean = np.nan
+            err = np.nan
+
+        means.append(mean)
+        errors.append(err)
 
     means, errors = np.array(means), np.array(errors)
     x_data = np.array(extrusions_list)
-    mask = ~np.isnan(means)
+    mask = (~np.isnan(means)) & (~np.isnan(errors)) & (errors > 0)
     
     if np.any(mask):
         # Plot data points
