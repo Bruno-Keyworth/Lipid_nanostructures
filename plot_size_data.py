@@ -50,18 +50,20 @@ def load_measurements(parent_folder="extrusions"):
             extrusions = entry.get("extrusions", 0)
 
             # Extract Peaks from repeat_peaks (flattening the list of lists)
-            all_repeats = [p for sublist in entry.get("repeat_peaks", []) for p in sublist]
+            peaks = entry.get("repeat_peaks", [])
+            for repeat in peaks:
+                if not repeat:
+                    continue
             
-            if all_repeats:
-                # Pick the peak with the largest area percent across all repeats
-                best_peak = max(all_repeats, key=lambda x: x.get("area_percent", 0))
-                
+                # pick largest peak in this measurement (repeat)
+                best_peak = max(repeat, key=lambda x: x.get("area_percent", 0))
+            
                 processed_entries.append({
                     "lipid": lipid_type,
                     "temperature_C": float(temp),
                     "extrusions": int(extrusions),
-                    "peak_size_nm": float(best_peak.get("peak_position_nm", 0)),
-                    "peak_sigma_nm": float(best_peak.get("peak_width_nm", 0))
+                    "peak_size_nm": float(best_peak.get("peak_position_nm", np.nan)),
+                    "peak_sigma_nm": float(best_peak.get("peak_width_nm", np.nan))
                 })
 
     return processed_entries
@@ -109,10 +111,24 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
         
         # Perform Fit
         try:
-            popt, _ = curve_fit(model, x_data[mask], means[mask], 
+            popt, pcov = curve_fit(model, x_data[mask], means[mask], 
                                p0=[min(means[mask]), max(means[mask]), 15], 
                                sigma=errors[mask], absolute_sigma=True)
+            perr = np.sqrt(np.diag(pcov))
             
+            y_fit = model(x_data[mask], *popt)
+            residuals = means[mask] - y_fit
+            chi2 = np.sum((residuals / errors[mask])**2)
+            dof = len(y_fit) - len(popt)
+            chi2_red = chi2 / dof if dof > 0 else np.nan
+        
+            # Print results
+            print(f"\n{lipid} at {target_temp}°C, {key}")
+            print(f"D_inf = {popt[0]:.3f} ± {perr[0]:.3f}")
+            print(f"D0    = {popt[1]:.3f} ± {perr[1]:.3f}")
+            print(f"N     = {popt[2]:.3f} ± {perr[2]:.3f}")
+            print(f"Reduced chi^2 = {chi2_red:.3f}")
+
             x_fit = np.linspace(min(extrusions_list), max(extrusions_list), 100)
             ax.plot(x_fit, model(x_fit, *popt), '--', color=color, alpha=0.7)
         except Exception as e:
