@@ -78,7 +78,8 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
     subset = [d for d in data if d["lipid"] == lipid and d["temperature_C"] == target_temp]
 
     for e in extrusions_list:
-        # Collect valid values
+        
+        error_percent = 0.05
         vals = [
             d[key] for d in subset
             if d["extrusions"] == e and np.isfinite(d[key]) and d[key] > 0
@@ -87,11 +88,15 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
         if len(vals) > 1:
             mean = np.mean(vals)
             std = np.std(vals, ddof=1)
-            err = max(std, 0.05 * mean)
+            if std == 0:
+                err = max(std, error_percent * mean)
+            else:
+                err = std
             
         elif len(vals) == 1:
+            
             mean = vals[0]
-            err = 0.05 * mean
+            err = error_percent * mean
             
         else:
             mean = np.nan
@@ -99,6 +104,8 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
 
         means.append(mean)
         errors.append(err)
+        #print(f"{lipid}, extrusions = {e}, mean = {means[-1]}, err = {errors[-1]}")
+        
 
     means, errors = np.array(means), np.array(errors)
     x_data = np.array(extrusions_list)
@@ -183,9 +190,9 @@ if __name__ == "__main__":
     extrusions = [3, 5, 10, 11, 15, 20, 21,  31, 41, 51, 61]
     
     # 1. Diameter Plot
-    generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
+    #generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
     
     # 2. Width (Sigma) Plot
-    generate_comparison(extrusions, "peak_sigma_nm", "Peak Width (nm)", "Width")
+    #generate_comparison(extrusions, "peak_sigma_nm", "Peak Width (nm)", "Width")
     
     generate_double_figure(extrusions, "peak_size_nm", "peak_sigma_nm" ,  "both")
