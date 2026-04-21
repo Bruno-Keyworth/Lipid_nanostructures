@@ -38,38 +38,52 @@ def load_entries():
 
     return entries
 
+def deduplicate_latest_per_day(entries):
+    """
+    Keep only the latest entry per (sample_name, day).
+    """
+    latest = {}
 
-def extract_peak_diameter(entry):
-    """Take diameter from peak with largest area."""
-    peaks = entry.get("peaks", [])
-    if not peaks:
-        return None
-    peak = max(peaks, key=lambda x: float(x.get("area_percent") or 0))
-    try:
-        return float(peak.get("peak_position_nm") or 0)
-    except Exception:
-        return None
+    for entry in entries:
+        sample = entry.get("sample_name")
+        ts = entry.get("timestamp")
+        start = entry.get("lipid_start_time")
 
+        if not (sample and ts and start):
+            continue
 
-def extract_peak_width(entry):
-    """Take width from peak with largest area."""
-    peaks = entry.get("peaks", [])
-    if not peaks:
-        return None
-    peak = max(peaks, key=lambda x: float(x.get("area_percent") or 0))
-    try:
-        return float(peak.get("peak_width_nm") or 0)
-    except Exception:
-        return None
+        try:
+            day = time_since(start, ts)
+            dt = datetime.strptime(ts, time_format)
+        except Exception:
+            continue
+
+        key = (sample, day)
+
+        # keep the latest timestamp
+        if key not in latest or dt > latest[key]["_dt"]:
+            entry["_dt"] = dt  # store parsed datetime temporarily
+            latest[key] = entry
+
+    # remove helper field before returning
+    for e in latest.values():
+        e.pop("_dt", None)
+
+    return list(latest.values())
     
 def extract_peak_diameter(entry):
     """Take diameter from smallest-size peak."""
     peaks = entry.get("peaks", [])
+    if entry['sample_name'].split(' ')[0] == '7':
+        print(entry['timestamp'])
+        print(entry.get("peaks", []))
     if not peaks:
         return None
 
     try:
         peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        if entry['sample_name'].split(' ')[0] == '7' and entry['timestamp'].split(' ')[0]=='14':
+            print(float(peak.get("peak_position_nm") or np.nan))
         return float(peak.get("peak_position_nm") or np.nan)
     except Exception:
         return None
@@ -172,6 +186,9 @@ def plot_aging_lipids(entries):
         
         for entry in lipid_entries:
             entry["lipid_start_time"] = lipid_start_time
+            
+    for lipid in entries_by_lipid:
+        entries_by_lipid[lipid] = deduplicate_latest_per_day(entries_by_lipid[lipid])
     
     for lipid, lipid_entries in entries_by_lipid.items():
         plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter)
