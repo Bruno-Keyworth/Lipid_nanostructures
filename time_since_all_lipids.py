@@ -61,6 +61,31 @@ def extract_peak_width(entry):
         return float(peak.get("peak_width_nm") or 0)
     except Exception:
         return None
+    
+def extract_peak_diameter(entry):
+    """Take diameter from smallest-size peak."""
+    peaks = entry.get("peaks", [])
+    if not peaks:
+        return None
+
+    try:
+        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        return float(peak.get("peak_position_nm") or np.nan)
+    except Exception:
+        return None
+
+
+def extract_peak_width(entry):
+    """Take width from smallest-size peak."""
+    peaks = entry.get("peaks", [])
+    if not peaks:
+        return None
+
+    try:
+        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        return float(peak.get("peak_width_nm") or np.nan)
+    except Exception:
+        return None
 
 def standardise_sample(entry):
     sample_name = entry.get("sample_name", "")
