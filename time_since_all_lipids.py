@@ -70,33 +70,72 @@ def deduplicate_latest_per_day(entries):
         e.pop("_dt", None)
 
     return list(latest.values())
+
+def keep_last_n_per_day(entries, n):
+    grouped = defaultdict(list)
+
+    for entry in entries:
+        sample = entry.get("sample_name")
+        ts = entry.get("timestamp")
+        start = entry.get("lipid_start_time")
+
+        if not (sample and ts and start):
+            continue
+        if not entry.get("peaks"):
+            continue
+
+        try:
+            day = time_since(start, ts)
+            dt = datetime.strptime(ts, time_format)
+        except Exception:
+            continue
+
+        key = (sample, day)
+        entry["_dt"] = dt 
+        grouped[key].append(entry)
+
+    result = []
+    for key, group in grouped.items():
+        group_sorted = sorted(group, key=lambda x: x["_dt"])
+        last_n = group_sorted[-n:]  # take last n
+        result.extend(last_n)
+
+    for e in result:
+        e.pop("_dt", None)
+
+    return result
     
-def extract_peak_diameter(entry):
+def extract_peak_diameter(entry, min_peak):
     """Take diameter from smallest-size peak."""
     peaks = entry.get("peaks", [])
-    if entry['sample_name'].split(' ')[0] == '7':
-        print(entry['timestamp'])
-        print(entry.get("peaks", []))
     if not peaks:
         return None
 
     try:
-        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
-        if entry['sample_name'].split(' ')[0] == '7' and entry['timestamp'].split(' ')[0]=='14':
-            print(float(peak.get("peak_position_nm") or np.nan))
+        if min_peak:
+            peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        else:
+            peak = max(peaks, key=lambda x: float(x.get("peak_position_nm") or 0))
         return float(peak.get("peak_position_nm") or np.nan)
     except Exception:
         return None
 
 
-def extract_peak_width(entry):
+def extract_peak_width(entry, min_peak):
     """Take width from smallest-size peak."""
     peaks = entry.get("peaks", [])
+    if "09 April" in entry.get("timestamp"):
+        if "7" in entry.get("lipid"):
+            if "size" in entry.get("type"):
+                print("====")
     if not peaks:
         return None
 
     try:
-        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        if min_peak:
+            peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        else:
+            peak = max(peaks, key=lambda x: float(x.get("peak_position_nm") or 0))
         return float(peak.get("peak_width_nm") or np.nan)
     except Exception:
         return None
@@ -146,7 +185,8 @@ def time_since(start, end):
     time = datetime.strptime(end, time_format).date()
     return (time - start).days
 
-def plot_line(ax, name, entries, extractor):
+
+def plot_line(ax, name, entries, extractor, min_peak = True):
     
     values_by_day = defaultdict(list)
     
@@ -155,7 +195,7 @@ def plot_line(ax, name, entries, extractor):
         
         day = time_since(entry['lipid_start_time'], entry['timestamp'])
         
-        value = extractor(entry)
+        value = extractor(entry, min_peak)
         #print(name, entry['lipid_start_time'], entry['timestamp'], value)
         if value is None:
             continue
@@ -188,11 +228,13 @@ def plot_aging_lipids(entries):
             entry["lipid_start_time"] = lipid_start_time
             
     for lipid in entries_by_lipid:
-        entries_by_lipid[lipid] = deduplicate_latest_per_day(entries_by_lipid[lipid])
+        #entries_by_lipid[lipid] = deduplicate_latest_per_day(entries_by_lipid[lipid])
+        entries_by_lipid[lipid] = keep_last_n_per_day(entries_by_lipid[lipid], n=3)
     
     for lipid, lipid_entries in entries_by_lipid.items():
-        plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter)
-        plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width)
+        plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter, min_peak = True)
+        plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width, min_peak = True)
+        
 
         
 
