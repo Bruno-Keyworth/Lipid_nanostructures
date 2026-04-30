@@ -196,13 +196,9 @@ def plot_line(ax, name, entries, extractor):
     return None
 
 def plot_line_split(ax, name, entries, value_index):
-    """
-    value_index = 0 → diameter
-    value_index = 1 → width
-    """
 
-    low = defaultdict(list)   # <200 nm
-    high = defaultdict(list)  # ≥200 nm
+    low = defaultdict(list)
+    high = defaultdict(list)
 
     for entry in entries:
         day = time_since(entry['lipid_start_time'], entry['timestamp'])
@@ -213,21 +209,29 @@ def plot_line_split(ax, name, entries, value_index):
             value = diameter if value_index == 0 else width
             target[day].append(value)
 
-    def plot_group(values_by_day, label_suffix):
+    # stable colour assignment
+    color = ax._get_lines.get_next_color()
+
+    def plot_group(values_by_day):
         if not values_by_day:
-            return
+            return None
 
         days = sorted(values_by_day.keys())
         avg = [np.mean(values_by_day[d]) for d in days]
         std = [np.std(values_by_day[d]) for d in days]
 
-        ax.errorbar(days, avg, yerr=std,
-                    ls="-", fmt='o',
-                    label=f"{name} {label_suffix}",
-                    capsize=4)
+        return ax.errorbar(
+            days, avg, yerr=std,
+            ls="-", fmt='o',
+            color=color,
+            capsize=4
+        )
 
-    plot_group(low, "<200 nm")
-    plot_group(high, "≥200 nm")
+    h1 = plot_group(low)
+    h2 = plot_group(high)
+
+    if h1 is not None:
+        h1[0].set_label(name)
 
 def plot_aging_lipids(entries):
     
