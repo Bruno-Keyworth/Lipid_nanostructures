@@ -38,10 +38,17 @@ def load_entries():
 
     return entries
 
+def parse_sample_name(name):
+    """
+    Returns:
+        base_name (without replicate index)
+        replicate_id (int or None)
+    """
+    match = re.match(r"^(.*)\s+(\d+)\s*$", name)
+    if match:
+        return match.group(1).strip(), int(match.group(2))
+    return name.strip(), None
 def deduplicate_latest_per_day(entries):
-    """
-    Keep only the latest entry per (sample_name, day).
-    """
     latest = {}
 
     for entry in entries:
@@ -52,35 +59,6 @@ def deduplicate_latest_per_day(entries):
         if not (sample and ts and start):
             continue
 
-        try:
-            day = time_since(start, ts)
-            dt = datetime.strptime(ts, time_format)
-        except Exception:
-            continue
-
-        key = (sample, day)
-
-        # keep the latest timestamp
-        if key not in latest or dt > latest[key]["_dt"]:
-            entry["_dt"] = dt  # store parsed datetime temporarily
-            latest[key] = entry
-
-    # remove helper field before returning
-    for e in latest.values():
-        e.pop("_dt", None)
-
-    return list(latest.values())
-
-def keep_last_n_per_day(entries, n):
-    grouped = defaultdict(list)
-
-    for entry in entries:
-        sample = entry.get("sample_name")
-        ts = entry.get("timestamp")
-        start = entry.get("lipid_start_time")
-
-        if not (sample and ts and start):
-            continue
         if not entry.get("peaks"):
             continue
 
@@ -90,55 +68,63 @@ def keep_last_n_per_day(entries, n):
         except Exception:
             continue
 
-        key = (sample, day)
-        entry["_dt"] = dt 
-        grouped[key].append(entry)
+        base, rep = parse_sample_name(sample)
 
-    result = []
-    for key, group in grouped.items():
-        group_sorted = sorted(group, key=lambda x: x["_dt"])
-        last_n = group_sorted[-n:]  # take last n
-        result.extend(last_n)
+        key = (base, rep, day)
 
-    for e in result:
+        if key not in latest or dt > latest[key]["_dt"]:
+            entry["_dt"] = dt
+            latest[key] = entry
+
+    for e in latest.values():
         e.pop("_dt", None)
 
-    return result
+    return list(latest.values())
     
-def extract_peak_diameter(entry, min_peak):
+def extract_peak_diameter(entry):
     """Take diameter from smallest-size peak."""
     peaks = entry.get("peaks", [])
     if not peaks:
         return None
 
     try:
-        if min_peak:
-            peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
-        else:
-            peak = max(peaks, key=lambda x: float(x.get("peak_position_nm") or 0))
+        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
+        if float(peak.get("peak_position_nm")) > 200:
+            return np.nan
         return float(peak.get("peak_position_nm") or np.nan)
     except Exception:
         return None
 
 
-def extract_peak_width(entry, min_peak):
+def extract_peak_width(entry):
     """Take width from smallest-size peak."""
     peaks = entry.get("peaks", [])
-    if "09 April" in entry.get("timestamp"):
-        if "7" in entry.get("lipid"):
-            if "size" in entry.get("type"):
-                print("====")
     if not peaks:
         return None
 
     try:
-        if min_peak:
-            peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
-        else:
-            peak = max(peaks, key=lambda x: float(x.get("peak_position_nm") or 0))
+        peak = min(peaks, key=lambda x: float(x.get("peak_position_nm") or np.inf))
         return float(peak.get("peak_width_nm") or np.nan)
     except Exception:
         return None
+    
+def extract_all_peaks(entry):
+    peaks = entry.get("peaks", [])
+    results = []
+
+    for p in peaks:
+        try:
+            diameter = float(p.get("peak_position_nm") or np.nan)
+            width = float(p.get("peak_width_nm") or np.nan)
+
+            if np.isnan(diameter):
+                continue
+
+            results.append((diameter, width))
+        except Exception:
+            continue
+
+    return results
 
 def standardise_sample(entry):
     sample_name = entry.get("sample_name", "")
@@ -185,8 +171,7 @@ def time_since(start, end):
     time = datetime.strptime(end, time_format).date()
     return (time - start).days
 
-
-def plot_line(ax, name, entries, extractor, min_peak = True):
+def plot_line(ax, name, entries, extractor):
     
     values_by_day = defaultdict(list)
     
@@ -195,7 +180,7 @@ def plot_line(ax, name, entries, extractor, min_peak = True):
         
         day = time_since(entry['lipid_start_time'], entry['timestamp'])
         
-        value = extractor(entry, min_peak)
+        value = extractor(entry)
         #print(name, entry['lipid_start_time'], entry['timestamp'], value)
         if value is None:
             continue
@@ -209,6 +194,40 @@ def plot_line(ax, name, entries, extractor, min_peak = True):
     
     ax.errorbar(days_sorted, avg_values, yerr=std_values, ls ="-",fmt='o', label=f"{name}", capsize=4)
     return None
+
+def plot_line_split(ax, name, entries, value_index):
+    """
+    value_index = 0 → diameter
+    value_index = 1 → width
+    """
+
+    low = defaultdict(list)   # <200 nm
+    high = defaultdict(list)  # ≥200 nm
+
+    for entry in entries:
+        day = time_since(entry['lipid_start_time'], entry['timestamp'])
+        peaks = extract_all_peaks(entry)
+
+        for diameter, width in peaks:
+            target = low if diameter < 200 else high
+            value = diameter if value_index == 0 else width
+            target[day].append(value)
+
+    def plot_group(values_by_day, label_suffix):
+        if not values_by_day:
+            return
+
+        days = sorted(values_by_day.keys())
+        avg = [np.mean(values_by_day[d]) for d in days]
+        std = [np.std(values_by_day[d]) for d in days]
+
+        ax.errorbar(days, avg, yerr=std,
+                    ls="-", fmt='o',
+                    label=f"{name} {label_suffix}",
+                    capsize=4)
+
+    plot_group(low, "<200 nm")
+    plot_group(high, "≥200 nm")
 
 def plot_aging_lipids(entries):
     
@@ -228,14 +247,16 @@ def plot_aging_lipids(entries):
             entry["lipid_start_time"] = lipid_start_time
             
     for lipid in entries_by_lipid:
-        #entries_by_lipid[lipid] = deduplicate_latest_per_day(entries_by_lipid[lipid])
-        entries_by_lipid[lipid] = keep_last_n_per_day(entries_by_lipid[lipid], n=3)
+        entries_by_lipid[lipid] = deduplicate_latest_per_day(entries_by_lipid[lipid])
     
     for lipid, lipid_entries in entries_by_lipid.items():
-        plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter, min_peak = True)
-        plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width, min_peak = True)
-        
 
+        if lipid == "7 DMPC : 3 DMPG":
+            plot_line_split(ax1, lipid, lipid_entries, value_index=0)  # diameter
+            plot_line_split(ax2, lipid, lipid_entries, value_index=1)  # width
+        else:
+            plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter)
+            plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width)
         
 
     ax1.set_xlabel("Time since extrusion (days)")
