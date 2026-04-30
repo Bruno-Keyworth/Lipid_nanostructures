@@ -94,73 +94,72 @@ def rows_label_values(rows):
         return rows["fraction_DMPG"].values
     return np.arange(len(rows))
 
-def create_peak_figure(df_rows, keys, titles, xlabel_vals=None, xlabel_name=None, fig_shape=(1, 3), filename_prefix="plot"):
-    """
-    Create peak plots with integer bar positions but custom x-axis labels.
-    
-    Parameters
-    ----------
-    df_rows : list of pd.DataFrame
-        One DataFrame per subplot/condition.
-    keys : list of str
-        'pos', 'width', 'area'.
-    titles : list of str
-        Titles for each subplot.
-    xlabel_vals : list of lists, optional
-        List of numeric values for x-axis labels (one list per subplot). If None, uses indices.
-    xlabel_name : str, optional
-        Name to show below x-axis (e.g. 'Lipid fraction', 'Surfactant concentration')
-    fig_shape : tuple
-        Grid shape.
-    filename_prefix : str
-        Prefix for saved figure.
-    """
-    for key in keys:
-        fig, axes = plt.subplots(*fig_shape, figsize=(6*fig_shape[1], 4*fig_shape[0]), constrained_layout=True)
-        axes = np.array(axes).flatten()
-        
-        for i, (ax, rows, title) in enumerate(zip(axes, df_rows, titles)):
-            if rows.empty:
-                continue
-            
-            # Inside create_peak_figure, for each subplot:
-            x_pos = np.arange(len(rows))  # integer bar positions
-            plot_peak_bars(ax, rows, key, width=0.25)  # positions handled inside plot_peak_bars
-            
-            # Set ticks and labels
-            ax.set_xticks(x_pos)
-            ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[i]])  # numeric values for display
-            if xlabel_name:
-                ax.set_xlabel(xlabel_name)
-            
-            # tick labels
-            if xlabel_vals is not None:
-                ax.set_xticks(x_pos)
-                ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[i]])
+def create_peak_figure(df_rows, titles, xlabel_vals=None,
+                       xlabel_name=None, fig_shape=(2, 3),
+                       filename_prefix="plot"):
+
+    fig, axes = plt.subplots(
+        fig_shape[0], fig_shape[1],
+        figsize=(6*fig_shape[1], 4*fig_shape[0]),
+        constrained_layout=True,
+        sharex='col',
+        sharey='row'
+    )
+
+    axes = np.array(axes)
+
+    row_keys = ["pos", "width"]
+
+    for col, (rows, title) in enumerate(zip(df_rows, titles)):
+
+        if rows.empty:
+            continue
+
+        for row, key in enumerate(row_keys):
+            ax = axes[row, col]
+
+            x_pos = np.arange(len(rows))
+
+            plot_peak_bars(ax, rows, key, width=0.25)
+
+            # x-axis only on bottom row
+            if row == 1:
+                if xlabel_vals is not None:
+                    ax.set_xticks(x_pos)
+                    ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[col]])
+                else:
+                    ax.set_xticks(x_pos)
+                    ax.set_xticklabels([str(v) for v in x_pos])
+
+                if xlabel_name:
+                    ax.set_xlabel(xlabel_name, fontsize=20)
+
             else:
-                ax.set_xticks(x_pos)
-                ax.set_xticklabels([str(v) for v in x_pos])
-            
-            ax.set_title(title)
-            ax.set_ylabel(peak_labels[key])
-            if key == 'pos':
-                ax.set_yscale('log')
-            else: 
-                ax.set_ylim(bottom=0)
+                ax.set_xticks([])
+
+            if row == 0:
+                ax.set_title(title, fontsize=22)
+
             ax.margins(y=0.05)
-            if xlabel_name:
-                ax.set_xlabel(xlabel_name)
-        
-        for ax in axes[len(df_rows):]:
-            fig.delaxes(ax)
-        
-        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-        cbar.set_label("Peak Area (%)")
-        
-        fig.savefig(PLOTS_FOLDER / f"{key}_{filename_prefix}.png", dpi=300)
-        plt.show()
+
+    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=20)
+    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=20)
+    for ax in axes[0, :]:
+        ax.set_yscale('log')
+    for ax in axes[1, :]:
+        ax.set_ylim(bottom=0)
+    for ax in axes.flat:
+        ax.relim()
+        ax.autoscale_view()
+
+    # colourbar (area)
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes, pad=0.02)
+    cbar.set_label("Peak Area (%)", fontsize=20)
+
+    fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
+    plt.show()
 
 # --- Refactored concentration plot ---
 def create_concentration_plots(df, ratio=0.3, zeta=True):
@@ -184,13 +183,12 @@ def create_concentration_plots(df, ratio=0.3, zeta=True):
         titles.append(surf)
     
     create_peak_figure(
-    df_rows=df_rows,
-    keys=["pos", "width", "area"],
-    titles=titles,
-    xlabel_vals=x_vals,              # surfactant concentrations
-    xlabel_name=r"Surfactant concentration ($\mu$M)",
-    fig_shape=(1,3),
-    filename_prefix="concentration"
+        df_rows=df_rows,
+        titles=titles,
+        xlabel_vals=x_vals,
+        xlabel_name=r"Surfactant concentration ($\mu$M)",
+        fig_shape=(2, 3),
+        filename_prefix="concentration"
     )
     if zeta:
         plot_zeta_against_concentration(df, surfactants)
@@ -211,13 +209,12 @@ def create_fraction_plots(df, zeta=True):
         titles.append(cond)
     
     create_peak_figure(
-    df_rows=df_rows,
-    keys=["pos", "width", "area"],
-    titles=titles,
-    xlabel_vals=x_vals,              # DMPG fractions
-    xlabel_name="DMPG fraction",
-    fig_shape=(2,2),
-    filename_prefix="fraction"
+        df_rows=df_rows,
+        titles=titles,
+        xlabel_vals=x_vals,
+        xlabel_name="DMPG fraction",
+        fig_shape=(2, 4),
+        filename_prefix="fraction"
     )
     if zeta:
         plot_zeta_against_fraction(df, conditions)
