@@ -130,10 +130,6 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
                 else:
                     ax.set_xticks(x_pos)
                     ax.set_xticklabels([str(v) for v in x_pos])
-
-                if xlabel_name:
-                    ax.set_xlabel(xlabel_name, fontsize=20)
-
             else:
                 ax.set_xticks([])
 
@@ -151,7 +147,8 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
     for ax in axes.flat:
         ax.relim()
         ax.autoscale_view()
-
+        ax.tick_params(labelsize=16)
+    fig.supxlabel(xlabel_name, fontsize=20)
     # colourbar (area)
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
