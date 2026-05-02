@@ -41,6 +41,13 @@ peak_labels = {
     "area": "Peak Area (%)",
 }
 
+label_map = {
+    "Control": "Control",
+    "C12E6": r"$C_{12}E_6$",
+    "DDAC": "DDAC",
+    "TX100": "Triton X-100",
+}
+
 
 def surfactant_condition(row):
 
@@ -134,7 +141,7 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
                 ax.set_xticks([])
 
             if row == 0:
-                ax.set_title(title, fontsize=22)
+                ax.set_title(label_map.get(title, title), fontsize=22)
 
             ax.margins(y=0.05)
 
@@ -149,7 +156,6 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
         ax.autoscale_view()
         ax.tick_params(labelsize=16)
     fig.supxlabel(xlabel_name, fontsize=20)
-    # colourbar (area)
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, pad=0.02)
@@ -255,7 +261,7 @@ def plot_zeta_against_concentration(df, surfactants):
             marker="o",
             linestyle="-",
             capsize=3,
-            label=surf,
+            label=label_map.get(surf, surf),
             color=colours[surf]
         )
 
@@ -285,7 +291,7 @@ def plot_zeta_against_fraction(df, conditions):
             linestyle="-",
             capsize=3,
             color=colours[cond],
-            label=cond  # only needed for legend
+            label=label_map.get(cond, cond)
         )
     
     # Control reference
@@ -313,7 +319,7 @@ def plot_zeta_against_fraction(df, conditions):
             linestyle="-",
             capsize=3,
             color=colours[cond],
-            label=cond  # only needed for legend
+            label=label_map.get(cond, cond)
         )
     
     # Reference line at 0
