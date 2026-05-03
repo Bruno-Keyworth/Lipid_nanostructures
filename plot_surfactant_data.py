@@ -226,7 +226,7 @@ def plot_zeta_against_concentration(df, surfactants):
     # Identify control (no surfactant added)
     control = df[(df["C12E6"] == 0) & (df["DDAC"] == 0) & (df["TX100"] == 0)]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(12, 6))
 
     if not control.empty:
         control_zeta = control["zeta"].mean()
@@ -265,10 +265,10 @@ def plot_zeta_against_concentration(df, surfactants):
             color=colours[surf]
         )
 
-    ax.set_xlabel("Surfactant concentration (µM)")
-    ax.set_ylabel("Zeta Potential (mV)")
+    ax.set_xlabel("Surfactant concentration (µM)", fontsize=22)
+    ax.set_ylabel(r"$\zeta$ (mV)", fontsize=22)
     ax.set_xscale('log')
-    ax.legend()
+    ax.legend(fontsize=22, framealpha=0)
 
     fig.tight_layout()
     fig.savefig(PLOTS_FOLDER / "zeta_conc.png", dpi=300)
@@ -326,10 +326,10 @@ def plot_zeta_against_fraction(df, conditions):
     axes[1].axhline(0, linestyle="--", linewidth=1, color=colours["Control"])
     
     # Axis labels
-    axes[0].set_ylabel("Zeta Potential (mV)")
-    axes[1].set_ylabel("Zeta Potential - Control (mV)")
+    axes[0].set_ylabel(r"$\zeta$ (mV)", fontsize=22)
+    axes[1].set_ylabel(r"$\Delta\zeta$ (mV)", fontsize=22)
     for ax in axes:
-        ax.set_xlabel("DMPG Fraction")
+        ax.set_xlabel("DMPG Fraction", fontsize=22)
     
     # Create common legend without duplicates
     handles, labels = axes[0].get_legend_handles_labels()
@@ -340,8 +340,8 @@ def plot_zeta_against_fraction(df, conditions):
         loc="lower center",
         ncol=len(by_label),
         frameon=False,
-        fontsize=12,
-        bbox_to_anchor=(0.5, -0.1)
+        fontsize=22,
+        bbox_to_anchor=(0.5, -0.15)
     )
     
     fig.tight_layout()
