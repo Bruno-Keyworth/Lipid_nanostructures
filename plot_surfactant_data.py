@@ -141,12 +141,12 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
                 ax.set_xticks([])
 
             if row == 0:
-                ax.set_title(label_map.get(title, title), fontsize=22)
+                ax.set_title(label_map.get(title, title), fontsize=26)
 
             ax.margins(y=0.05)
 
-    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=20)
-    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=20)
+    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=26)
+    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=26)
     for ax in axes[0, :]:
         ax.set_yscale('log')
     for ax in axes[1, :]:
@@ -155,11 +155,11 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
         ax.relim()
         ax.autoscale_view()
         ax.tick_params(labelsize=16)
-    fig.supxlabel(xlabel_name, fontsize=20)
+    fig.supxlabel(xlabel_name, fontsize=26)
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-    cbar.set_label("Peak Area (%)", fontsize=20)
+    cbar.set_label("Peak Area (%)", fontsize=26)
 
     fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
     plt.show()
@@ -264,7 +264,7 @@ def plot_zeta_against_concentration(df, surfactants):
             label=label_map.get(surf, surf),
             color=colours[surf]
         )
-
+    ax.tick_params(labelsize=16)
     ax.set_xlabel("Surfactant concentration (µM)", fontsize=22)
     ax.set_ylabel(r"$\zeta$ (mV)", fontsize=22)
     ax.set_xscale('log')
@@ -330,6 +330,7 @@ def plot_zeta_against_fraction(df, conditions):
     axes[1].set_ylabel(r"$\Delta\zeta$ (mV)", fontsize=22)
     for ax in axes:
         ax.set_xlabel("DMPG Fraction", fontsize=22)
+        ax.tick_params(labelsize=16)
     
     # Create common legend without duplicates
     handles, labels = axes[0].get_legend_handles_labels()

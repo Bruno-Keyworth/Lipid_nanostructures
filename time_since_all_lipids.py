@@ -228,7 +228,8 @@ def plot_line_split(ax, name, entries, value_index):
         )
 
     h1 = plot_group(low)
-    h2 = plot_group(high)
+    #h2 = plot_group(high)
+    print(high)
 
     if h1 is not None:
         h1[0].set_label(name)
