@@ -9,7 +9,6 @@ Created on Wed May  6 23:39:49 2026
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
 from get_filepaths import DATA_FOLDER
 
 # ---- Load JSON file ----
@@ -32,33 +31,35 @@ peak_width = peak["peak_width_nm"]
 
 fig, ax = plt.subplots(figsize=(10, 5))
 
-ax.plot(sizes, intensities, marker='o', markersize=3)
+ax.plot(sizes, intensities, marker='o', markersize=3, c='b')
 
 # Peak position
 ax.axvline(
     peak_pos,
     linestyle="--",
-    label=f"Peak position = {peak_pos:.1f} nm"
+    label=f"Peak position = {peak_pos:.1f} nm",
+    c='r'
 )
 
 # Peak width region
 left = peak_pos - peak_width / 2
 right = peak_pos + peak_width / 2
 
-ax.axvspan(
-    left,
-    right,
-    alpha=0.2,
-    label=f"Peak width = {peak_width:.1f} nm"
-)
-
-ax.set_xscale("log")
+# ax.axvspan(
+#     left,
+#     right,
+#     alpha=0.2,
+#     label=f"Peak width = {peak_width:.1f} nm",
+#     color='r'
+# )
+ax.tick_params(labelsize=18)
+#ax.set_xscale("log")
 ax.set_xlim(30, 300)
 
-ax.set_xlabel("Hydrodynamic diameter (nm)")
-ax.set_ylabel("Relative intensity (%)")
+ax.set_xlabel("Hydrodynamic Diameter (nm)", fontsize=22)
+ax.set_ylabel("Relative Intensity (%)", fontsize=22)
 
-ax.legend()
+ax.legend(fontsize=20, framealpha=0)
 
 plt.tight_layout()
 plt.show()
