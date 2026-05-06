@@ -33,14 +33,16 @@ def load_measurements(parent_folder="extrusions"):
 
         for entry in entries:
             ratios = entry.get("lipid_ratio", {})
-            
+
             # Determine Lipid Type based on ratio of 10
             lipid_type = None
             if ratios.get("POPC") == 10:
                 lipid_type = "POPC"
             elif ratios.get("DMPC") == 10:
                 lipid_type = "DMPC"
-            
+            elif ratios.get("DOPC") == 10:
+                lipid_type = "DOPC"
+
             # Skip if it's not one of our target pure lipids
             if not lipid_type:
                 continue
@@ -54,10 +56,10 @@ def load_measurements(parent_folder="extrusions"):
             for repeat in peaks:
                 if not repeat:
                     continue
-            
+
                 # pick largest peak in this measurement (repeat)
                 best_peak = max(repeat, key=lambda x: x.get("area_percent", 0))
-            
+
                 processed_entries.append({
                     "lipid": lipid_type,
                     "temperature_C": float(temp),
@@ -142,17 +144,21 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
             print(f"Fit failed for {lipid} {target_temp}C: {e}")
 
 def generate_comparison(extrusions_list, key, ylabel, filename):
-    all_data = load_measurements("extrusions")
+    all_data = (
+    load_measurements("extrusions") +
+    load_measurements("data_from_kate")
+)
     
     fig, ax = plt.subplots(figsize=(9, 6))
     
     # Target: POPC at 30 degrees and DMPC at 50 degrees
     add_series(ax, all_data, "POPC", 30.0, extrusions_list, key, "royalblue")
     add_series(ax, all_data, "DMPC", 50.0, extrusions_list, key, "firebrick")
+    add_series(ax, all_data, "DOPC", 25.0, extrusions_list, key, "forestgreen")
 
     ax.set_xlabel("Number of Extrusions")
     ax.set_ylabel(ylabel)
-    ax.set_title(f"Comparison of POPC (30°C) and DMPC (50°C)")
+    #ax.set_title(f"Comparison of POPC (30°C) and DMPC (50°C)")
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.4)
     
@@ -161,16 +167,21 @@ def generate_comparison(extrusions_list, key, ylabel, filename):
     plt.show()
     
 def generate_double_figure(extrusions_list, key1, key2, filename):
-    all_data = load_measurements("extrusions")
+    all_data = (
+    load_measurements("extrusions") +
+    load_measurements("data_from_kate")
+)
     
     fig, (ax1,ax2) = plt.subplots(1,2,figsize=(12, 5))
     
     # Target: POPC at 30 degrees and DMPC at 50 degrees
     add_series(ax1, all_data, "POPC", 30.0, extrusions_list, key1, "royalblue")
     add_series(ax1, all_data, "DMPC", 50.0, extrusions_list, key1, "firebrick")
+    add_series(ax1, all_data, "DOPC", 25.0, extrusions_list, key1, "forestgreen")
     
     add_series(ax2, all_data, "POPC", 30.0, extrusions_list, key2, "royalblue")
     add_series(ax2, all_data, "DMPC", 50.0, extrusions_list, key2, "firebrick")
+    add_series(ax2, all_data, "DOPC", 25.0, extrusions_list, key2, "forestgreen")
 
     ax1.set_xlabel("Number of Extrusions")
     ax2.set_xlabel("Number of Extrusions")
