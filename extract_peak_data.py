@@ -13,7 +13,6 @@ from collections import defaultdict
 from datetime import datetime
 from get_filepaths import DATA_FOLDER
 from read_zetasizer_data import read_zetasizer_data, base_sample_name
-from read_data_from_kate import read_data_from_kate
 from read_sample_name import read_sample_name
 import pandas as pd
 
@@ -392,7 +391,7 @@ if __name__ == '__main__':
     read_zetasizer_data("POPC_temp_extrsusion_size.txt", "extrusions")
     read_zetasizer_data("surfactant_sizes.txt", "surfactants")
     read_zetasizer_data("surfactant_zetas.txt", "surfactants")
-    #read_data_from_kate('data_from_kate.txt', 'data_from_kate')
+    read_zetasizer_data('data_from_kate_renamed.txt', 'data_from_kate')
     read_zetasizer_data('time_since_extrusion.txt', 'aging')
     read_zetasizer_data('extrusion_number.txt', 'extrusions')
     
@@ -401,4 +400,4 @@ if __name__ == '__main__':
     process_folder("POPC-POPG")
     process_folder("aging")
     process_folder("surfactants")
-    #process_folder("data_from_kate")
+    process_folder("data_from_kate")
