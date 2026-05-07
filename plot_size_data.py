@@ -13,6 +13,8 @@ from scipy.optimize import curve_fit
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
 
+extrusions = [3, 5, 10, 11, 15, 20, 21,  31, 41, 51, 61]
+
 def load_measurements(parent_folder="extrusions"):
     """
     Recursively loads JSON files from parent_folder.
@@ -73,6 +75,22 @@ def load_measurements(parent_folder="extrusions"):
 def model(n, D_inf, D0, N):
     return D_inf + (D0 - D_inf) * np.exp(-n / N)
 
+def compute_n_star(D_inf, D0, N, epsilon=0.02):
+    """
+    Solve for n where relative deviation from asymptote is below epsilon:
+        |D(n) - D_inf| / D_inf < epsilon
+    """
+    if D_inf <= 0 or D0 <= D_inf:
+        return np.nan
+
+    ratio = (epsilon * D_inf) / (D0 - D_inf)
+
+    if ratio <= 0:
+        return np.nan
+
+    n_star = -N * np.log(ratio)
+    return n_star
+
 def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
     """Filters data for a series and adds points + fit to the plot."""
     means, errors = [], []
@@ -116,13 +134,15 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
     if np.any(mask):
         # Plot data points
         ax.errorbar(x_data[mask], means[mask], yerr=errors[mask], fmt='o', 
-                    color=color, label=f"{lipid} ({target_temp}°C)", capsize=4)
+                    color=color, label=f"{lipid} Data", capsize=4)
         
         # Perform Fit
         try:
             popt, pcov = curve_fit(model, x_data[mask], means[mask], 
                                p0=[min(means[mask]), max(means[mask]), 15], 
                                sigma=errors[mask], absolute_sigma=True)
+            n_star = compute_n_star(popt[0], popt[1], popt[2], epsilon=0.02)
+            print(f"n* (2% criterion) = {n_star:.2f}")
             perr = np.sqrt(np.diag(pcov))
             
             y_fit = model(x_data[mask], *popt)
@@ -139,32 +159,16 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color):
             print(f"Reduced chi^2 = {chi2_red:.3f}")
 
             x_fit = np.linspace(min(extrusions_list), max(extrusions_list), 100)
-            ax.plot(x_fit, model(x_fit, *popt), '--', color=color, alpha=0.7)
+            ax.plot(
+                x_fit,
+                model(x_fit, *popt),
+                '--',
+                color=color,
+                alpha=0.7,
+                label=f"{lipid} fit"
+            )
         except Exception as e:
             print(f"Fit failed for {lipid} {target_temp}C: {e}")
-
-def generate_comparison(extrusions_list, key, ylabel, filename):
-    all_data = (
-    load_measurements("extrusions") +
-    load_measurements("data_from_kate")
-)
-    
-    fig, ax = plt.subplots(figsize=(9, 6))
-    
-    # Target: POPC at 30 degrees and DMPC at 50 degrees
-    add_series(ax, all_data, "POPC", 30.0, extrusions_list, key, "royalblue")
-    add_series(ax, all_data, "DMPC", 50.0, extrusions_list, key, "firebrick")
-    add_series(ax, all_data, "DOPC", 25.0, extrusions_list, key, "forestgreen")
-
-    ax.set_xlabel("Number of Extrusions")
-    ax.set_ylabel(ylabel)
-    #ax.set_title(f"Comparison of POPC (30°C) and DMPC (50°C)")
-    ax.legend()
-    ax.grid(True, linestyle="--", alpha=0.4)
-    
-    plt.tight_layout()
-    plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
-    plt.show()
     
 def generate_double_figure(extrusions_list, key1, key2, filename):
     all_data = (
@@ -172,7 +176,7 @@ def generate_double_figure(extrusions_list, key1, key2, filename):
     load_measurements("data_from_kate")
 )
     
-    fig, (ax1,ax2) = plt.subplots(1,2,figsize=(12, 5))
+    fig, (ax1,ax2) = plt.subplots(1,2,figsize=(12, 6))
     
     # Target: POPC at 30 degrees and DMPC at 50 degrees
     add_series(ax1, all_data, "POPC", 30.0, extrusions_list, key1, "royalblue")
@@ -187,21 +191,30 @@ def generate_double_figure(extrusions_list, key1, key2, filename):
     ax2.set_ylabel("Peak Width (nm)", fontsize=20)
     #fig.suptitle("Comparison of POPC (30°C) and DMPC (50°C)")
     for ax in [ax1, ax2]:
-        ax.legend(framealpha=0, fontsize=18)
         ax.tick_params(labelsize=16)
         ax.set_xlabel("Extrusion Passes", fontsize=20)
+        
+    handles, labels = ax1.get_legend_handles_labels()
     
-    plt.tight_layout()
+    order = (0, 3, 1, 4, 2, 5)
+    
+    handles = [handles[i] for i in order]
+    labels  = [labels[i] for i in order]
+
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        fontsize=16,
+        bbox_to_anchor=(0.5, 0)
+    )
+    
+    plt.tight_layout(rect=[0, 0.15, 1, 1])
     plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
     plt.show()
 
 if __name__ == "__main__":
-    extrusions = [3, 5, 10, 11, 15, 20, 21,  31, 41, 51, 61]
-    
-    # 1. Diameter Plot
-    #generate_comparison(extrusions, "peak_size_nm", "Peak Diameter (nm)", "Diameter")
-    
-    # 2. Width (Sigma) Plot
-    #generate_comparison(extrusions, "peak_sigma_nm", "Peak Width (nm)", "Width")
     
     generate_double_figure(extrusions, "peak_size_nm", "peak_sigma_nm" ,  "both")

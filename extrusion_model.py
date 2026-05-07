@@ -15,7 +15,7 @@ N_bins = 500        # resolution
 D = np.linspace(D_min, D_max, N_bins)
 
 dD = D[1] - D[0]
-D_F = 100.0        # filter pore diameter
+D_F = 50        # filter pore diameter
 w = 0.6 * D_F      # Gaussian width
 D0 = 10.0          # minimum vesicle diameter
     
