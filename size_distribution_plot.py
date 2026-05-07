@@ -9,7 +9,7 @@ Created on Wed May  6 23:39:49 2026
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from get_filepaths import DATA_FOLDER
+from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
 # ---- Load JSON file ----
 file_path = DATA_FOLDER / 'extrusions' / '31_Extrusion_POPC_0.2_mg_ml_30_degrees_new_sample.json'
@@ -31,7 +31,7 @@ peak_width = peak["peak_width_nm"]
 
 fig, ax = plt.subplots(figsize=(10, 5))
 
-ax.plot(sizes, intensities, marker='o', markersize=3, c='b')
+ax.plot(sizes, intensities, marker='o', markersize=3, c='b', label='DLS Intensity Distribution')
 
 # Peak position
 ax.axvline(
@@ -45,13 +45,29 @@ ax.axvline(
 left = peak_pos - peak_width / 2
 right = peak_pos + peak_width / 2
 
-# ax.axvspan(
-#     left,
-#     right,
-#     alpha=0.2,
-#     label=f"Peak width = {peak_width:.1f} nm",
-#     color='r'
-# )
+# Example schematic width region
+width_left = 55
+width_right = 140
+
+# Height where the arrow will sit
+arrow_y = 8
+
+# Double-headed arrow
+ax.annotate(
+    '',
+    xy=(width_left, arrow_y),
+    xytext=(width_right, arrow_y),
+    arrowprops=dict(arrowstyle='<->', lw=2)
+)
+
+# Label
+ax.text(
+    (width_left + width_right) / 2,
+    arrow_y + 0.8,
+    'Peak Width',
+    ha='center',
+    fontsize=20
+)
 ax.tick_params(labelsize=18)
 #ax.set_xscale("log")
 ax.set_xlim(30, 300)
@@ -62,4 +78,5 @@ ax.set_ylabel("Relative Intensity (%)", fontsize=22)
 ax.legend(fontsize=20, framealpha=0)
 
 plt.tight_layout()
+plt.savefig(PLOTS_FOLDER / 'size_distribution.png', dpi=300)
 plt.show()

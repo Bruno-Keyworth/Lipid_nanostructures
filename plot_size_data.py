@@ -183,15 +183,13 @@ def generate_double_figure(extrusions_list, key1, key2, filename):
     add_series(ax2, all_data, "DMPC", 50.0, extrusions_list, key2, "firebrick")
     add_series(ax2, all_data, "DOPC", 25.0, extrusions_list, key2, "forestgreen")
 
-    ax1.set_xlabel("Number of Extrusions")
-    ax2.set_xlabel("Number of Extrusions")
-    ax1.set_ylabel("Peak Diameter, [nm]")
-    ax2.set_ylabel("Peak Width, [nm]")
-    fig.suptitle("Comparison of POPC (30°C) and DMPC (50°C)")
-    ax1.legend()
-    ax2.legend()
-    ax1.grid(True, linestyle="--", alpha=0.4)
-    ax2.grid(True, linestyle="--", alpha=0.4)
+    ax1.set_ylabel("Hydrodynamic Diameter (nm)", fontsize=20)
+    ax2.set_ylabel("Peak Width (nm)", fontsize=20)
+    #fig.suptitle("Comparison of POPC (30°C) and DMPC (50°C)")
+    for ax in [ax1, ax2]:
+        ax.legend(framealpha=0, fontsize=18)
+        ax.tick_params(labelsize=16)
+        ax.set_xlabel("Extrusion Passes", fontsize=20)
     
     plt.tight_layout()
     plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
