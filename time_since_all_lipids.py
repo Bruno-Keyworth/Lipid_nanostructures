@@ -257,22 +257,30 @@ def plot_aging_lipids(entries):
     for lipid, lipid_entries in entries_by_lipid.items():
 
         if lipid == "7 DMPC : 3 DMPG":
-            plot_line_split(ax1, lipid, lipid_entries, value_index=0)  # diameter
-            plot_line_split(ax2, lipid, lipid_entries, value_index=1)  # width
+            # plot_line_split(ax1, lipid, lipid_entries, value_index=0)  # diameter
+            # plot_line_split(ax2, lipid, lipid_entries, value_index=1)  # width
+            x=1
         else:
             plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter)
             plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width)
         
+    for ax in [ax1, ax2]:
+        ax.set_xlabel("Time since extrusion (days)", fontsize=22)
+        ax.tick_params(labelsize=16)
+    ax1.set_ylabel("Peak Diameter (nm)", fontsize=22)
+    ax2.set_ylabel("Peak Width (nm)", fontsize=22)
+    handles, labels = ax1.get_legend_handles_labels()
 
-    ax1.set_xlabel("Time since extrusion (days)")
-    ax2.set_xlabel("Time since extrusion (days)")
-    ax1.set_ylabel("Peak Diameter (nm)")
-    ax2.set_ylabel("Peak Width (nm)")
-    ax1.legend()
-    ax2.legend()
-    ax1.grid(linestyle="--", alpha=0.3)
-    ax2.grid(linestyle="--", alpha=0.3)
-    plt.tight_layout()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        fontsize=16,
+        bbox_to_anchor=(0.5, 0)
+    )
+    plt.tight_layout(rect=[0, 0.1, 1, 1])
     plt.savefig(PLOTS_FOLDER / "time_since_extrusion_all_lipids.png", dpi=300)
     plt.show()
     return None
