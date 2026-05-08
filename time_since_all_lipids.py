@@ -6,8 +6,6 @@ Created on Sun Mar 29 18:13:22 2026
 
 modified version of code written by bruno keyworth
 """
-
-
 import json
 from pathlib import Path
 from datetime import datetime
@@ -16,6 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
+from scipy.stats import linregress
 
 aging_FOLDER = DATA_FOLDER / "aging"
 extrusion = 31
@@ -37,6 +36,9 @@ def load_entries():
             entries.append(entry)
 
     return entries
+
+def relaxation_model(t, X_inf, X0, tau):
+    return X_inf + (X0 - X_inf) * np.exp(-t / tau)
 
 def parse_sample_name(name):
     """
@@ -171,68 +173,70 @@ def time_since(start, end):
     time = datetime.strptime(end, time_format).date()
     return (time - start).days
 
-def plot_line(ax, name, entries, extractor):
-    
+def plot_line(ax, name, entries, extractor, fit):
+
     values_by_day = defaultdict(list)
-    
+
     # Group values by day
     for entry in entries:
-        
+
         day = time_since(entry['lipid_start_time'], entry['timestamp'])
-        
+
         value = extractor(entry)
-        #print(name, entry['lipid_start_time'], entry['timestamp'], value)
-        if value is None:
+
+        if value is None or np.isnan(value):
             continue
-        
+
         values_by_day[day].append(value)
-    
-    # Compute averages
-    days_sorted = sorted(values_by_day.keys())
-    avg_values = [np.mean(values_by_day[day]) for day in days_sorted]
-    std_values = [np.std(values_by_day[day]) for day in days_sorted]
-    
-    ax.errorbar(days_sorted, avg_values, yerr=std_values, ls ="-",fmt='o', label=f"{name}", capsize=4)
-    return None
 
-def plot_line_split(ax, name, entries, value_index):
+    # averages
+    days_sorted = np.array(sorted(values_by_day.keys()))
 
-    low = defaultdict(list)
-    high = defaultdict(list)
+    avg_values = np.array([
+        np.mean(values_by_day[d])
+        for d in days_sorted
+    ])
 
-    for entry in entries:
-        day = time_since(entry['lipid_start_time'], entry['timestamp'])
-        peaks = extract_all_peaks(entry)
+    std_values = np.array([
+        np.std(values_by_day[d])
+        for d in days_sorted
+    ])
 
-        for diameter, width in peaks:
-            target = low if diameter < 200 else high
-            value = diameter if value_index == 0 else width
-            target[day].append(value)
+    # plot data
+    ax.errorbar(
+        days_sorted,
+        avg_values,
+        yerr=std_values,
+        fmt='o',
+        ls='none',
+        capsize=4,
+        label=name
+    )
 
-    # stable colour assignment
-    color = ax._get_lines.get_next_color()
+    # linear fit
+    if not fit:
+        return None
+    if len(days_sorted) >= 2:
 
-    def plot_group(values_by_day):
-        if not values_by_day:
-            return None
+        result = linregress(days_sorted, avg_values)
 
-        days = sorted(values_by_day.keys())
-        avg = [np.mean(values_by_day[d]) for d in days]
-        std = [np.std(values_by_day[d]) for d in days]
+        slope = result.slope
+        intercept = result.intercept
+        r2 = result.rvalue**2
 
-        return ax.errorbar(
-            days, avg, yerr=std,
-            ls="-", fmt='o',
-            color=color,
-            capsize=4
+        x_fit = np.linspace(
+            days_sorted.min(),
+            days_sorted.max(),
+            200
         )
 
-    h1 = plot_group(low)
-    #h2 = plot_group(high)
-    print(high)
+        y_fit = slope * x_fit + intercept
 
-    if h1 is not None:
-        h1[0].set_label(name)
+        ax.plot(x_fit, y_fit, alpha=0.8, ls='--')
+
+        print(f"\n{name}")
+        print(f"Slope = {slope:.4f} nm/day")
+        print(f"R^2   = {r2:.3f}")
 
 def plot_aging_lipids(entries):
     
@@ -256,13 +260,23 @@ def plot_aging_lipids(entries):
     
     for lipid, lipid_entries in entries_by_lipid.items():
 
-        if lipid == "7 DMPC : 3 DMPG":
-            # plot_line_split(ax1, lipid, lipid_entries, value_index=0)  # diameter
-            # plot_line_split(ax2, lipid, lipid_entries, value_index=1)  # width
-            x=1
-        else:
-            plot_line(ax1, lipid, lipid_entries, extractor=extract_peak_diameter)
-            plot_line(ax2, lipid, lipid_entries, extractor=extract_peak_width)
+        fit_allowed = lipid != "7 DMPC : 3 DMPG"
+
+        plot_line(
+            ax1,
+            lipid,
+            lipid_entries,
+            extractor=extract_peak_diameter,
+            fit=fit_allowed
+        )
+        
+        plot_line(
+            ax2,
+            lipid,
+            lipid_entries,
+            extractor=extract_peak_width,
+            fit=fit_allowed
+        )
         
     for ax in [ax1, ax2]:
         ax.set_xlabel("Time since extrusion (days)", fontsize=22)
@@ -275,9 +289,9 @@ def plot_aging_lipids(entries):
         handles,
         labels,
         loc="lower center",
-        ncol=3,
+        ncol=4,
         frameon=False,
-        fontsize=16,
+        fontsize=18,
         bbox_to_anchor=(0.5, 0)
     )
     plt.tight_layout(rect=[0, 0.1, 1, 1])

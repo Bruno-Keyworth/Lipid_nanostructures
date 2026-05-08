@@ -72,24 +72,44 @@ def load_measurements(parent_folder="extrusions"):
 def model(n, D_inf, D0, N):
     return D_inf + (D0 - D_inf) * np.exp(-n / N)
 
-
-def compute_n_star(D_inf, D0, N, sigma_frac=0.05, epsilon=0.05):
+def compute_n_star(D_inf, D0, N, x_data, y_err, epsilon=0.05):
+    """
+    Data-driven n* using:
+    - actual sampled extrusion points (not n+1)
+    - propagated measurement uncertainty
+    """
 
     def D(n):
         return D_inf + (D0 - D_inf) * np.exp(-n / N)
 
-    def step_change(n):
-        return np.abs(D(n) - D(n + 1))
+    x_data = np.array(x_data)
+    y_err = np.array(y_err)
 
-    n_vals = np.arange(0, 200)
+    # sort to ensure monotonic ordering
+    order = np.argsort(x_data)
+    x = x_data[order]
+    err = y_err[order]
 
-    deviation = np.abs((D(n_vals) - D_inf) / D_inf)
-    noise = sigma_frac * D_inf
+    D_vals = D(x)
 
-    condition = (deviation < epsilon) & (step_change(n_vals) < noise)
+    # model change between successive measured points
+    delta_model = np.abs(np.diff(D_vals))
 
-    idx = np.where(condition)[0]
-    return idx[0] if len(idx) > 0 else np.nan
+    # propagated experimental uncertainty
+    sigma_delta = np.sqrt(err[:-1]**2 + err[1:]**2)
+
+    # asymptotic condition
+    asymptote = np.abs((D_vals[:-1] - D_inf) / D_inf)
+
+    mask = (delta_model < sigma_delta) & (asymptote < epsilon)
+
+    idx = np.where(mask)[0]
+
+    if len(idx) == 0:
+        return np.nan
+
+    # return first valid extrusion point
+    return x[idx[0]]
 
 
 # ----------------------------
@@ -171,7 +191,7 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color, fit=Tr
 
         perr = np.sqrt(np.diag(pcov))
 
-        n_star = compute_n_star(*popt)
+        n_star = compute_n_star(popt[0], popt[1], popt[2], x_data[mask], errors[mask])
 
         print(f"\n{lipid} at {target_temp}°C, {key}")
         print(f"D_inf = {popt[0]:.3f} ± {perr[0]:.3f}")
@@ -189,6 +209,17 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color, fit=Tr
             alpha=0.7,
             label=f"{lipid} Fit"
         )
+        y_fit = model(x_data[mask], *popt)
+
+        residuals = means[mask] - y_fit
+        
+        chi2 = np.sum((residuals / errors[mask])**2)
+        
+        dof = len(y_fit) - len(popt)
+        
+        chi2_red = chi2 / dof if dof > 0 else np.nan
+        
+        print(f"Reduced chi^2 = {chi2_red:.3f}")
 
     except Exception as e:
         print(f"Fit failed for {lipid}: {e}")
