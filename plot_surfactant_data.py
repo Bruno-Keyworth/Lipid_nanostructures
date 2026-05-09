@@ -16,11 +16,11 @@ import matplotlib as mpl
 cmap = mpl.cm.viridis
 norm = mpl.colors.Normalize(vmin=0, vmax=100)
 plt.rcParams.update({
-    "font.size": 14,          # base size
+    "font.size": 16,          # base size
     "axes.titlesize": 16,     # subplot titles
-    "axes.labelsize": 14,     # x and y labels
-    "xtick.labelsize": 12,    # x tick labels
-    "ytick.labelsize": 12,    # y tick labels
+    "axes.labelsize": 16,     # x and y labels
+    "xtick.labelsize": 15,    # x tick labels
+    "ytick.labelsize": 14,    # y tick labels
     "legend.fontsize": 12,
     "figure.titlesize": 18,
 })
@@ -107,7 +107,7 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
 
     fig, axes = plt.subplots(
         fig_shape[0], fig_shape[1],
-        figsize=(6*fig_shape[1], 4*fig_shape[0]),
+        figsize=(6*fig_shape[1], 6*fig_shape[0]),
         constrained_layout=True,
         sharex='col',
         sharey='row'
@@ -155,8 +155,8 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
         ax.relim()
         ax.autoscale_view()
         ax.tick_params(labelsize=16)
-    sub = [r'$\textbf{(a)}\ C_{12}E_6$', r'\textbf{(b)} DDAC', r'\textbf{(c)} Triton X-100', 
-           r'\textbf{(d)}', r'\textbf{(e)}', r'\textbf{(f)}',
+    sub = [r'\textbf{(a)} Control', r'$\textbf{(b)}\ C_{12}E_6$', r'\textbf{(c)} DDAC', r'\textbf{(d)} Triton X-100', 
+           r'\textbf{(e)}', r'\textbf{(f)}',
            r'\textbf{(g)}', r'\textbf{(h)}']
     
     for i, ax in enumerate(axes.flat):
@@ -206,8 +206,8 @@ def create_concentration_plots(df, ratio=0.3, zeta=True):
         fig_shape=(2, 3),
         filename_prefix="concentration"
     )
-    if zeta:
-        plot_zeta_against_concentration(df, surfactants)
+    # if zeta:
+    #     plot_zeta_against_concentration(df, surfactants)
 
 # --- Refactored fraction plot ---
 def create_fraction_plots(df, zeta=True):
@@ -344,7 +344,7 @@ def plot_zeta_against_fraction(df, conditions):
     for label, ax in {r'\textbf{(a)}': axes[0], 
                       r'\textbf{(b)}': axes[1]}.items(): 
         ax.set_xlabel("DMPG Fraction", fontsize=22)
-        ax.tick_params(labelsize=16)
+        #ax.tick_params(labelsize=16)
         ax.text(
                 0.02, 0.97, label,
                 transform=ax.transAxes,
@@ -377,6 +377,6 @@ if __name__ == "__main__":
     df = gather_data(folder)
     create_fraction_plots(df)
     
-    folder = DATA_FOLDER / "surfactants" / "25_degrees"
-    df = gather_data(folder)
-    create_concentration_plots(df)
+    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    # df = gather_data(folder)
+    # create_concentration_plots(df)
