@@ -140,8 +140,8 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
             else:
                 ax.set_xticks([])
 
-            if row == 0:
-                ax.set_title(label_map.get(title, title), fontsize=26)
+            # if row == 0:
+            #     ax.set_title(label_map.get(title, title), fontsize=26)
 
             ax.margins(y=0.05)
 
@@ -155,11 +155,24 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
         ax.relim()
         ax.autoscale_view()
         ax.tick_params(labelsize=16)
-    fig.supxlabel(xlabel_name, fontsize=26)
+    sub = [r'$\textbf{(a)}\ C_{12}E_6$', r'\textbf{(b)} DDAC', r'\textbf{(c)} Triton X-100', 
+           r'\textbf{(d)}', r'\textbf{(e)}', r'\textbf{(f)}',
+           r'\textbf{(g)}', r'\textbf{(h)}']
+    
+    for i, ax in enumerate(axes.flat):
+        ax.text(
+            0.02, 0.97, sub[i],
+            transform=ax.transAxes,
+            fontsize=20,
+            fontweight='bold',
+            va='top',
+            ha='left'
+        )
+    fig.supxlabel(xlabel_name, fontsize=28)
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-    cbar.set_label("Peak Area (%)", fontsize=26)
+    cbar.set_label("Relative Peak Intensity (\%)", fontsize=26)
 
     fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
     plt.show()
@@ -219,8 +232,8 @@ def create_fraction_plots(df, zeta=True):
         fig_shape=(2, 4),
         filename_prefix="fraction"
     )
-    if zeta:
-        plot_zeta_against_fraction(df, conditions)
+    # if zeta:
+    #     plot_zeta_against_fraction(df, conditions)
 
 def plot_zeta_against_concentration(df, surfactants):
     # Identify control (no surfactant added)
@@ -265,7 +278,7 @@ def plot_zeta_against_concentration(df, surfactants):
             color=colours[surf]
         )
     ax.tick_params(labelsize=16)
-    ax.set_xlabel("Surfactant concentration (µM)", fontsize=22)
+    ax.set_xlabel("Surfactant Concentration (µM)", fontsize=22)
     ax.set_ylabel(r"$\zeta$ (mV)", fontsize=22)
     ax.set_xscale('log')
     ax.legend(fontsize=22, framealpha=0)
@@ -328,9 +341,17 @@ def plot_zeta_against_fraction(df, conditions):
     # Axis labels
     axes[0].set_ylabel(r"$\zeta$ (mV)", fontsize=22)
     axes[1].set_ylabel(r"$\Delta\zeta$ (mV)", fontsize=22)
-    for ax in axes:
+    for label, ax in {r'\textbf{(a)}': axes[0], 
+                      r'\textbf{(b)}': axes[1]}.items(): 
         ax.set_xlabel("DMPG Fraction", fontsize=22)
         ax.tick_params(labelsize=16)
+        ax.text(
+                0.02, 0.97, label,
+                transform=ax.transAxes,
+                fontsize=20,
+                fontweight='bold',
+                va='top', ha='left'
+            )
     
     # Create common legend without duplicates
     handles, labels = axes[0].get_legend_handles_labels()

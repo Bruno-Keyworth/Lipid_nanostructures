@@ -162,7 +162,7 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color, fit=Tr
         yerr=errors[mask],
         fmt='o',
         color=color,
-        label=f"{lipid} Data",
+        label=f"{lipid}",
         capsize=4
     )
 
@@ -207,7 +207,6 @@ def add_series(ax, data, lipid, target_temp, extrusions_list, key, color, fit=Tr
             '--',
             color=color,
             alpha=0.7,
-            label=f"{lipid} Fit"
         )
         y_fit = model(x_data[mask], *popt)
 
@@ -252,16 +251,19 @@ def generate_double_figure(extrusions_list, key1, key2, filename):
     ax1.set_ylabel("Hydrodynamic Diameter (nm)", fontsize=20)
     ax2.set_ylabel("Peak Width (nm)", fontsize=20)
 
-    for ax in [ax1, ax2]:
+    for label, ax in {r'\textbf{(a)}': ax1, 
+                      r'\textbf{(b)}': ax2}.items(): 
         ax.tick_params(labelsize=16)
         ax.set_xlabel("Extrusion Passes", fontsize=20)
+        ax.text(
+                0.08, 0.97, label,
+                transform=ax.transAxes,
+                fontsize=20,
+                fontweight='bold',
+                va='top', ha='left'
+            )
 
     handles, labels = ax1.get_legend_handles_labels()
-    
-    order = [2, 0, 3, 1, 4]
-    
-    handles = [handles[i] for i in order]
-    labels = [labels[i] for i in order]
 
     fig.legend(
         handles,
@@ -273,7 +275,7 @@ def generate_double_figure(extrusions_list, key1, key2, filename):
         bbox_to_anchor=(0.5, 0)
     )
 
-    plt.tight_layout(rect=[0, 0.15, 1, 1])
+    plt.tight_layout(rect=[0, 0.08, 1, 1])
     plt.savefig(PLOTS_FOLDER / f"Comparison_{filename}.png", dpi=300)
     plt.show()
 
