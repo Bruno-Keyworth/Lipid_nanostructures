@@ -16,15 +16,15 @@ import matplotlib as mpl
 cmap = mpl.cm.viridis
 norm = mpl.colors.Normalize(vmin=0, vmax=100)
 plt.rcParams.update({
-    "font.size": 16,          # base size
-    "axes.titlesize": 16,     # subplot titles
-    "axes.labelsize": 16,     # x and y labels
-    "xtick.labelsize": 15,    # x tick labels
-    "ytick.labelsize": 14,    # y tick labels
-    "legend.fontsize": 12,
-    "figure.titlesize": 18,
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+    "axes.labelsize": 12,
+    "font.size": 12,
+    "legend.fontsize": 11,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
 })
-
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 from extract_peak_data import gather_data
 
@@ -84,6 +84,7 @@ def plot_peak_bars(ax, rows, key, width=0.25):
                 capsize=3,
                 color=colour,
                 edgecolor="black",
+                zorder=3
             )
             
 def rows_label_values(rows):
@@ -107,7 +108,7 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
 
     fig, axes = plt.subplots(
         fig_shape[0], fig_shape[1],
-        figsize=(6*fig_shape[1], 6*fig_shape[0]),
+        figsize=(5*fig_shape[1], 5*fig_shape[0]),
         constrained_layout=True,
         sharex='col',
         sharey='row'
@@ -124,7 +125,7 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
 
         for row, key in enumerate(row_keys):
             ax = axes[row, col]
-
+            ax.grid(zorder=0)
             x_pos = np.arange(len(rows))
 
             plot_peak_bars(ax, rows, key, width=0.25)
@@ -145,34 +146,40 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
 
             ax.margins(y=0.05)
 
-    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=26)
-    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=26)
+    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=30)
+    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=30)
     for ax in axes[0, :]:
         ax.set_yscale('log')
+        ax.set_yticks([10**2, 2*10**2, 3 * 10**2, 4*10**2, 5*10**2, 6*10**2, 7*10**2, 8*10**2, 9*10**2, 10**3])
     for ax in axes[1, :]:
         ax.set_ylim(bottom=0)
     for ax in axes.flat:
         ax.relim()
         ax.autoscale_view()
-        ax.tick_params(labelsize=16)
+        ax.tick_params(labelsize=22)
     sub = [r'\textbf{(a)} Control', r'$\textbf{(b)}\ C_{12}E_6$', r'\textbf{(c)} DDAC', r'\textbf{(d)} Triton X-100', 
            r'\textbf{(e)}', r'\textbf{(f)}',
            r'\textbf{(g)}', r'\textbf{(h)}']
+    if xlabel_name == r"Surfactant concentration ($\mu$M)":
+        sub = [r'$\textbf{(a)}\ C_{12}E_6$', r'\textbf{(b)} DDAC', r'\textbf{(c)} Triton X-100', 
+               r'\textbf{(d)}', r'\textbf{(e)}',
+               r'\textbf{(f)}']
     
     for i, ax in enumerate(axes.flat):
         ax.text(
             0.02, 0.97, sub[i],
             transform=ax.transAxes,
-            fontsize=20,
+            fontsize=26,
             fontweight='bold',
             va='top',
-            ha='left'
+            ha='left',
+            zorder =3
         )
     fig.supxlabel(xlabel_name, fontsize=28)
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-    cbar.set_label("Relative Peak Intensity (\%)", fontsize=26)
+    cbar.set_label("Relative Peak Intensity (\%)", fontsize=30)
 
     fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
     plt.show()

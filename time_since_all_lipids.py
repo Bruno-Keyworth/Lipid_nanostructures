@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 import re
 from matplotlib import rcParams
+
 rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
@@ -25,6 +26,7 @@ rcParams.update({
     "xtick.labelsize": 9,
     "ytick.labelsize": 9,
 })
+
 
 aging_FOLDER = DATA_FOLDER / "aging"
 extrusion = 31
@@ -255,10 +257,11 @@ def plot_line(ax, name, entries, extractor, fit):
 
     # linear fit
     if not fit:
+        
         return None
     if len(days_sorted) >= 2:
         
-        p = np.polyfit(days_sorted, avg_values, 1)
+        p, cov = np.polyfit(days_sorted, avg_values, 1, cov=True)
         x_fit = np.linspace(
             days_sorted.min(),
             days_sorted.max(),
@@ -271,6 +274,7 @@ def plot_line(ax, name, entries, extractor, fit):
 
         print(f"\n{name}")
         print(p[0])
+        print(np.sqrt(cov[0][0]))
 
 def extract_zeta(entry):
 
