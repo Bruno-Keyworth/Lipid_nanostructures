@@ -185,9 +185,9 @@ def compute_cluster_stats(clusters, peak_owner, n_entries):
 
     return results
 
-def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
+def cluster_peaks(entries, max_pos_nm=3000, min_area=5):
 
-    all_peaks, peak_owner = collect_all_peaks(entries, min_area, max_pos_nm)
+    all_peaks, peak_owner = collect_all_peaks(entries, min_area=0, max_pos_nm=max_pos_nm)
 
     if not all_peaks:
         return []
@@ -206,12 +206,13 @@ def cluster_peaks(entries, max_pos_nm=3000, min_area=7):
 
     results = compute_cluster_stats(clusters, peak_owner, len(entries))
 
-    # final renormalisation
-    total_area = sum(r["area_percent"][0] for r in results)
-    if total_area > 0:
-        for r in results:
-            r["area_percent"][0] *= 100 / total_area
-            r["area_percent"][1] *= 100 / total_area
+    # -------------------------------------------------
+    # FILTER SMALL CLUSTERS (final step, no rescaling)
+    # -------------------------------------------------
+    results = [
+        r for r in results
+        if r["area_percent"][0] >= min_area
+    ]
 
     return results
 
@@ -223,24 +224,19 @@ def average_measurements(input_file):
     with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # ---- Split by type ----
     size_data = [d for d in data if d.get("type") == "size"]
     zeta_data = [d for d in data if d.get("type") == "zeta"]
 
-    # ---- Keep only latest measurements ----
     size_data = filter_latest_measurements(size_data)
     zeta_data = filter_latest_measurements(zeta_data)
 
-    # ---- Group ----
     size_groups = group_by_base_and_temp(size_data)
     zeta_groups = group_by_base_and_temp(zeta_data)
 
     all_keys = set(size_groups) | set(zeta_groups)
 
-    # ---- Process each condition ----
     for (base, temp) in all_keys:
 
-        # ---------- SIZE / PEAKS ----------
         entries = size_groups.get((base, temp), [])
 
         repeat_peaks = [
@@ -252,14 +248,15 @@ def average_measurements(input_file):
             for entry in entries
         ]
 
-        # This now returns FINAL peaks with [mean, std]
-        avg_peaks = cluster_peaks(entries)
+        # -----------------------------
+        # NO RENORMALISATION HERE
+        # -----------------------------
+        avg_peaks = cluster_peaks(entries, min_area=5)
 
-        # Sanity check (optional but useful)
+        # Optional sanity check (now just informational)
         if avg_peaks:
-            total_area = sum(p.get("area_percent")[0] for p in avg_peaks)
-            if not np.isclose(total_area, 100, atol=1e-6):
-                print(f"Warning: area sums to {total_area:.2f} for {base}, {temp}")
+            total_area = sum(p["area_percent"][0] for p in avg_peaks)
+            print(f"{base}, {temp}: retained area sum = {total_area:.2f}% (un-normalised)")
 
         # ---------- ZETA ----------
         zeta_entries = zeta_groups.get((base, temp), [])
@@ -278,7 +275,6 @@ def average_measurements(input_file):
         else:
             average_zeta = [None, None]
 
-        # ---------- OUTPUT ----------
         results = read_sample_name(base) | {
             "temperature_C": temp,
             "average_zeta": average_zeta,
@@ -289,6 +285,7 @@ def average_measurements(input_file):
 
         with open(_output_file(input_file, temp), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
+
 
 def mean_err(entry):
     if entry and isinstance(entry, list) and len(entry) == 2:

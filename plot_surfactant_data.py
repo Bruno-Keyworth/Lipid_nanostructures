@@ -322,6 +322,96 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
     )
 
     plt.show()
+    
+def create_fraction_figure(df_rows, titles, xlabel_vals=None,
+                       xlabel_name=None, fig_shape=(2, 3),
+                       filename_prefix="plot"):
+
+    fig, axes = plt.subplots(
+    fig_shape[0], fig_shape[1],
+    figsize=(5*fig_shape[1], 5*fig_shape[0]),
+    constrained_layout=True,
+    sharex='col',
+    sharey='row'
+    )
+
+    axes = np.array(axes)
+
+    row_keys = ["pos", "width"]
+    for col, (rows, title) in enumerate(zip(df_rows, titles)):
+
+        if rows.empty:
+            continue
+
+        for row, key in enumerate(row_keys):
+            ax = axes[row, col]
+            ax.grid(zorder=0)
+            x_pos = np.arange(len(rows))
+
+            plot_peak_bars(ax, rows, key, width=0.25)
+
+            # x-axis only on bottom row
+            if row == 1:
+                if xlabel_vals is not None:
+                    ax.set_xticks(x_pos)
+                    ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[col]])
+                else:
+                    ax.set_xticks(x_pos)
+                    ax.set_xticklabels([str(v) for v in x_pos])
+            else:
+                ax.set_xticks([])
+        ax.grid(zorder=0)
+        ax.margins(y=0.05)
+
+        axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=30)
+        axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=30)
+        for ax in axes[0, :]:
+            ax.set_yscale('log')
+            ax.set_yticks([10**2, 2*10**2, 3 * 10**2, 4*10**2, 5*10**2, 6*10**2, 7*10**2, 8*10**2, 9*10**2, 10**3])
+        for ax in axes[1, :]:
+            ax.set_ylim(bottom=0)
+        for ax in axes.flat:
+            ax.relim()
+            ax.autoscale_view()
+            ax.tick_params(labelsize=22)
+
+    sub = [
+        r'\textbf{(a)} Control',
+        r'$\textbf{(b)}\ C_{12}E_6$',
+        r'\textbf{(c)} DDAC',
+        r'\textbf{(d)} Triton X-100',
+        r'\textbf{(e)}',
+        r'\textbf{(f)}',
+        r'\textbf{(g)}',
+        r'\textbf{(h)}'
+    ]
+
+    if xlabel_name == r"Surfactant concentration ($\mu$M)":
+        sub = [r'$\textbf{(a)}\ C_{12}E_6$', r'\textbf{(b)} DDAC', r'\textbf{(c)} Triton X-100', 
+               r'\textbf{(d)}', r'\textbf{(e)}',
+               r'\textbf{(f)}']
+    
+    for i, ax in enumerate(axes.flat):
+        ax.text(
+            0.02, 0.97, sub[i],
+            transform=ax.transAxes,
+            fontsize=26,
+            fontweight='bold',
+            va='top',
+            ha='left',
+            zorder=3
+        )
+
+    fig.supxlabel(xlabel_name, fontsize=28)
+
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes, pad=0.02)
+    cbar.set_label("Relative Peak Intensity (\%)", fontsize=30)
+
+    fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
+
+    plt.show()
 
 # --- Refactored concentration plot ---
 def create_concentration_plots(df, ratio=0.3, zeta=True):
@@ -370,7 +460,7 @@ def create_fraction_plots(df, zeta=True):
         x_vals.append(sub["fraction_DMPG"].values if not sub.empty else [])
         titles.append(cond)
     
-    create_peak_figure(
+    create_fraction_figure(
         df_rows=df_rows,
         titles=titles,
         xlabel_vals=x_vals,
@@ -519,10 +609,10 @@ def plot_zeta_against_fraction(df, conditions):
 if __name__ == "__main__":
     plt.close('all')
 
-    # folder = DATA_FOLDER / "surfactants" / "50_degrees"
-    # df = gather_data(folder)
-    # create_fraction_plots(df)
-    
-    folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    folder = DATA_FOLDER / "surfactants" / "50_degrees"
     df = gather_data(folder)
-    create_concentration_plots(df)
+    create_fraction_plots(df)
+    
+    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    # df = gather_data(folder)
+    # create_concentration_plots(df)
