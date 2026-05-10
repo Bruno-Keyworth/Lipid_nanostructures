@@ -190,7 +190,7 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
 
         ax.set_yscale('log')
         ax.set_yticks([
-            10**2, 2*10**2, 3*10**2, 4*10**2,
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 10**2, 2*10**2, 3*10**2, 4*10**2,
             5*10**2, 6*10**2, 7*10**2,
             8*10**2, 9*10**2, 10**3
         ])
@@ -369,7 +369,7 @@ def create_fraction_figure(df_rows, titles, xlabel_vals=None,
             ax.set_yscale('log')
             ax.set_yticks([10**2, 2*10**2, 3 * 10**2, 4*10**2, 5*10**2, 6*10**2, 7*10**2, 8*10**2, 9*10**2, 10**3])
         for ax in axes[1, :]:
-            ax.set_ylim(bottom=0)
+            ax.set_ylim(bottom=0, top=400)
         for ax in axes.flat:
             ax.relim()
             ax.autoscale_view()
@@ -609,10 +609,10 @@ def plot_zeta_against_fraction(df, conditions):
 if __name__ == "__main__":
     plt.close('all')
 
-    folder = DATA_FOLDER / "surfactants" / "50_degrees"
-    df = gather_data(folder)
-    create_fraction_plots(df)
-    
-    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    # folder = DATA_FOLDER / "surfactants" / "50_degrees"
     # df = gather_data(folder)
-    # create_concentration_plots(df)
+    # create_fraction_plots(df)
+    
+    folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    df = gather_data(folder)
+    create_concentration_plots(df)
