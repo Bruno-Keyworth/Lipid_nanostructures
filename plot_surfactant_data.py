@@ -106,66 +106,190 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
                        xlabel_name=None, fig_shape=(2, 3),
                        filename_prefix="plot"):
 
-    fig, axes = plt.subplots(
-        fig_shape[0], fig_shape[1],
-        figsize=(5*fig_shape[1], 5*fig_shape[0]),
-        constrained_layout=True,
-        sharex='col',
-        sharey='row'
+    import matplotlib.gridspec as gridspec
+
+    ncols = fig_shape[1]
+
+    fig = plt.figure(
+        figsize=(6*ncols, 10),
+        constrained_layout=True
     )
 
-    axes = np.array(axes)
+    # 3 rows:
+    # 0 = peak position
+    # 1 = upper broken width axis
+    # 2 = lower broken width axis
+    gs = gridspec.GridSpec(
+        3, ncols,
+        height_ratios=[2, 0.7, 1.5],
+        hspace=0.01,
+        figure=fig
+    )
+
+    axes_pos = []
+    axes_width_top = []
+    axes_width_bottom = []
+
+    for col in range(ncols):
+
+        ax_pos = fig.add_subplot(
+            gs[0, col],
+            sharey=axes_pos[0] if axes_pos else None
+        )
+        axes_pos.append(ax_pos)
+
+        ax_w_top = fig.add_subplot(
+            gs[1, col],
+            sharey=axes_width_top[0] if axes_width_top else None
+        )
+        axes_width_top.append(ax_w_top)
+
+        ax_w_bot = fig.add_subplot(
+            gs[2, col],
+            sharex=ax_w_top,
+            sharey=axes_width_bottom[0] if axes_width_bottom else None
+        )
+        axes_width_bottom.append(ax_w_bot)
 
     row_keys = ["pos", "width"]
+    all_axes = np.array([axes_pos, axes_width_top, axes_width_bottom]).reshape(3, ncols)
 
+    for r in range(all_axes.shape[0]):
+        for c in range(all_axes.shape[1]):
+    
+            ax = all_axes[r, c]
+    
+            if c == 0:
+                ax.tick_params(
+                    axis='y',
+                    left=True,
+                    labelleft=True
+                )
+            else:
+                ax.tick_params(
+                    axis='y',
+                    left=False,
+                    labelleft=False
+                )
+                ax.tick_params(labelleft=False)
     for col, (rows, title) in enumerate(zip(df_rows, titles)):
 
         if rows.empty:
             continue
 
-        for row, key in enumerate(row_keys):
-            ax = axes[row, col]
-            ax.grid(zorder=0)
-            x_pos = np.arange(len(rows))
+        x_pos = np.arange(len(rows))
 
-            plot_peak_bars(ax, rows, key, width=0.25)
+        # -----------------------------
+        # Peak position row
+        # -----------------------------
+        ax = axes_pos[col]
 
-            # x-axis only on bottom row
-            if row == 1:
-                if xlabel_vals is not None:
-                    ax.set_xticks(x_pos)
-                    ax.set_xticklabels([f"{v:g}" for v in xlabel_vals[col]])
-                else:
-                    ax.set_xticks(x_pos)
-                    ax.set_xticklabels([str(v) for v in x_pos])
-            else:
-                ax.set_xticks([])
+        ax.grid(zorder=0)
 
-            # if row == 0:
-            #     ax.set_title(label_map.get(title, title), fontsize=26)
+        plot_peak_bars(ax, rows, "pos", width=0.25)
 
-            ax.margins(y=0.05)
-
-    axes[0, 0].set_ylabel("Peak Position (nm)", fontsize=30)
-    axes[1, 0].set_ylabel("Peak Width (nm)", fontsize=30)
-    for ax in axes[0, :]:
         ax.set_yscale('log')
-        ax.set_yticks([10**2, 2*10**2, 3 * 10**2, 4*10**2, 5*10**2, 6*10**2, 7*10**2, 8*10**2, 9*10**2, 10**3])
-    for ax in axes[1, :]:
-        ax.set_ylim(bottom=0)
-    for ax in axes.flat:
+        ax.set_yticks([
+            10**2, 2*10**2, 3*10**2, 4*10**2,
+            5*10**2, 6*10**2, 7*10**2,
+            8*10**2, 9*10**2, 10**3
+        ])
+
+        ax.set_xticks([])
+
+        ax.margins(y=0.05)
+
+        # -----------------------------
+        # Peak width broken axes
+        # -----------------------------
+        ax_top = axes_width_top[col]
+        ax_bot = axes_width_bottom[col]
+
+        ax_top.grid(zorder=0)
+        ax_bot.grid(zorder=0)
+
+        # Plot onto BOTH axes
+        plot_peak_bars(ax_top, rows, "width", width=0.25)
+        plot_peak_bars(ax_bot, rows, "width", width=0.25)
+
+        # Broken ranges
+        ax_bot.set_ylim(0, 250)
+        ax_top.set_ylim(250, 1500)
+
+        # Hide touching spines
+        ax_top.spines['bottom'].set_visible(False)
+        ax_bot.spines['top'].set_visible(False)
+
+        ax_top.tick_params(labelbottom=False)
+
+        # Break marks
+        d = 0.015
+
+        kwargs = dict(
+            transform=ax_top.transAxes,
+            color='k',
+            clip_on=False
+        )
+
+        ax_top.plot((-d, +d), (-d, +d), **kwargs)
+        ax_top.plot((1-d, 1+d), (-d, +d), **kwargs)
+
+        kwargs.update(transform=ax_bot.transAxes)
+
+        ax_bot.plot((-d, +d), (1-d, 1+d), **kwargs)
+        ax_bot.plot((1-d, 1+d), (1-d, 1+d), **kwargs)
+
+        # X labels only on lower width row
+        if xlabel_vals is not None:
+            ax_bot.set_xticks(x_pos)
+            ax_bot.set_xticklabels(
+                [f"{v:g}" for v in xlabel_vals[col]]
+            )
+        else:
+            ax_bot.set_xticks(x_pos)
+            ax_bot.set_xticklabels([str(v) for v in x_pos])
+
+        ax_top.margins(y=0.05)
+        ax_bot.margins(y=0.05)
+
+    # Labels
+    axes_pos[0].set_ylabel("Peak Position (nm)", fontsize=30)
+    axes_width_bottom[0].set_ylabel("Peak Width (nm)", fontsize=30)
+
+    # Tick styling
+    for ax in axes_pos + axes_width_top + axes_width_bottom:
         ax.relim()
         ax.autoscale_view()
         ax.tick_params(labelsize=22)
-    sub = [r'\textbf{(a)} Control', r'$\textbf{(b)}\ C_{12}E_6$', r'\textbf{(c)} DDAC', r'\textbf{(d)} Triton X-100', 
-           r'\textbf{(e)}', r'\textbf{(f)}',
-           r'\textbf{(g)}', r'\textbf{(h)}']
+
+    sub = [
+        r'\textbf{(a)} Control',
+        r'$\textbf{(b)}\ C_{12}E_6$',
+        r'\textbf{(c)} DDAC',
+        r'\textbf{(d)} Triton X-100',
+        r'\textbf{(e)}',
+        r'\textbf{(f)}',
+        r'\textbf{(g)}',
+        r'\textbf{(h)}'
+    ]
+
     if xlabel_name == r"Surfactant concentration ($\mu$M)":
-        sub = [r'$\textbf{(a)}\ C_{12}E_6$', r'\textbf{(b)} DDAC', r'\textbf{(c)} Triton X-100', 
-               r'\textbf{(d)}', r'\textbf{(e)}',
-               r'\textbf{(f)}']
-    
-    for i, ax in enumerate(axes.flat):
+        sub = [
+            r'$\textbf{(a)}\ C_{12}E_6$',
+            r'\textbf{(b)} DDAC',
+            r'\textbf{(c)} Triton X-100',
+            r'\textbf{(d)}',
+            r'\textbf{(e)}',
+            r'\textbf{(f)}'
+        ]
+
+    all_axes_for_labels = (
+        axes_pos +
+        axes_width_top +
+        axes_width_bottom
+    )
+
+    for i, ax in enumerate(all_axes_for_labels[:len(sub)]):
         ax.text(
             0.02, 0.97, sub[i],
             transform=ax.transAxes,
@@ -173,15 +297,30 @@ def create_peak_figure(df_rows, titles, xlabel_vals=None,
             fontweight='bold',
             va='top',
             ha='left',
-            zorder =3
+            zorder=3
         )
+
     fig.supxlabel(xlabel_name, fontsize=28)
+
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=axes, pad=0.02)
-    cbar.set_label("Relative Peak Intensity (\%)", fontsize=30)
 
-    fig.savefig(PLOTS_FOLDER / f"{filename_prefix}.png", dpi=300)
+    cbar = fig.colorbar(
+        sm,
+        ax=all_axes_for_labels,
+        pad=0.02
+    )
+
+    cbar.set_label(
+        "Relative Peak Intensity (\%)",
+        fontsize=30
+    )
+
+    fig.savefig(
+        PLOTS_FOLDER / f"{filename_prefix}.png",
+        dpi=300
+    )
+
     plt.show()
 
 # --- Refactored concentration plot ---
@@ -380,10 +519,10 @@ def plot_zeta_against_fraction(df, conditions):
 if __name__ == "__main__":
     plt.close('all')
 
-    folder = DATA_FOLDER / "surfactants" / "50_degrees"
-    df = gather_data(folder)
-    create_fraction_plots(df)
-    
-    # folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    # folder = DATA_FOLDER / "surfactants" / "50_degrees"
     # df = gather_data(folder)
-    # create_concentration_plots(df)
+    # create_fraction_plots(df)
+    
+    folder = DATA_FOLDER / "surfactants" / "25_degrees"
+    df = gather_data(folder)
+    create_concentration_plots(df)

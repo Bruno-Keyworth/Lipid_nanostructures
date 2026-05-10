@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from get_filepaths import DATA_FOLDER, PLOTS_FOLDER
 
 # ---- Load JSON file ----
-file_path = DATA_FOLDER / 'extrusions' / '31_Extrusion_POPC_0.2_mg_ml_30_degrees_new_sample.json'
+file_path = DATA_FOLDER / 'surfactants' / '7_DMPC__3_DMPG_0.1_mg_ml_C12E6_100_microM.json'
 
 with open(file_path, "r") as f:
     data = json.load(f)
@@ -69,7 +69,7 @@ ax.text(
     fontsize=20
 )
 ax.tick_params(labelsize=18)
-#ax.set_xscale("log")
+ax.set_xscale("log")
 ax.set_xlim(30, 300)
 
 ax.set_xlabel("Hydrodynamic Diameter (nm)", fontsize=22)
